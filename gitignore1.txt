@@ -1,0 +1,86 @@
+########################################
+# OS / Editor
+########################################
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+########################################
+# Xcode
+########################################
+# Build artifacts
+DerivedData/
+build/
+*.xcuserstate
+
+# User-specific Xcode settings
+xcuserdata/
+*.xcuserdatad/
+
+# Workspace / project generated
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+
+########################################
+# Swift Package Manager
+########################################
+.build/
+.swiftpm/
+Package.resolved
+
+########################################
+# CocoaPods
+########################################
+Pods/
+# ※Podfile.lock は基本コミット推奨（再現性のため）
+
+########################################
+# Carthage (使っている場合)
+########################################
+Carthage/Build/
+
+########################################
+# fastlane (使っている場合)
+########################################
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output/
+
+########################################
+# Secrets / Local config（重要）
+########################################
+# APIキーやトークン、環境差分など
+*.env
+.env.*
+Secrets.xcconfig
+**/Secrets.xcconfig
+*secrets*
+*secret*
+*token*
+*apikey*
+*.p12
+*.mobileprovision
+
+########################################
+# Logs
+########################################
+*.log
+*.trace
+*.dSYM.zip
+
+########################################
+# Archives / Export
+########################################
+*.xcarchive
+*.ipa
+
+########################################
+# Optional: SkyWay旧SDK残骸の生成物（ローカルに出るなら）
+########################################
+SkyWay.framework/
+**/SkyWay.framework/
