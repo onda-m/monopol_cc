@@ -25,10 +25,10 @@ protocol SkywaySessionDelegate: AnyObject {
 class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublicationDelegate, RoomSubscriptionDelegate {
 
     //API Key
-    static let apiKey: String = "<あなた�EID>"
+    static let apiKey: String = "<あなた�EID>"
 
     //Domain
-    static let domain: String = "<あなた�E持E��したdomain>"
+    static let domain: String = "<あなた�E持E��したdomain>"
 
     private var room: Room?
     private var localMember: LocalRoomMember?
@@ -121,12 +121,12 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     /// ルームに参加し、ローカルストリームめEpublish する
     /// - Parameters:
-    ///   - roomName: 参加するルーム名（キャスト�E場合�E自刁E�E peerId、ユーザーの場合�Eキャスト�E peerId�E�E
-    ///   - delegate: コールバック受信用チE��ゲーチE
+    ///   - roomName: 参加するルーム名（キャスト�E場合�E自刁E�E peerId、ユーザーの場合�Eキャスト�E peerId�E�E
+    ///   - delegate: コールバック受信用チE��ゲーチE
     public func connectStart(roomName: String, delegate: SkywaySessionDelegate) {
         print("[SkyMgr] connectStart called, roomName=\(roomName), myPeerId=\(peerId)")
 
-        // 多重開始ガーチE 既に接続中の場合�EスキチE�E
+        // 多重開始ガーチE 既に接続中の場合�EスキチE�E
         if isConnectStarted && room != nil {
             print("[SkyMgr] connectStart skipped: already connected (isConnectStarted=true, room exists)")
             return
@@ -135,7 +135,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         isConnectStarted = true
         sessionDelegate = delegate
         roomClosed = false
-        subscribedPublicationIds.removeAll()  // リセチE��
+        subscribedPublicationIds.removeAll()  // リセチE��
         roomTask?.cancel()
         roomTask = Task { @MainActor in
             await leaveRoomIfNeeded()
@@ -296,7 +296,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
                 try? await localMember.unsubscribe(subscriptionId: subscriptionId)
             }
         }
-        roomSubscriptions.removeAll()  // 忁E��E 二重処琁E��止
+        roomSubscriptions.removeAll()  // 忁E��E 二重処琁E��止
         print("[SkyMgr] roomSubscriptions cleared")
 
         // (d) Unpublish all
@@ -306,7 +306,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
                 try? await localMember.unpublish(publicationId: publicationId)
             }
         }
-        roomPublications.removeAll()  // 忁E��E 二重処琁E��止
+        roomPublications.removeAll()  // 忁E��E 二重処琁E��止
         print("[SkyMgr] roomPublications cleared")
 
         // (e) Nil localMember delegate
@@ -559,13 +559,13 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     func room(_ room: Room, memberDidLeave member: RoomMember) {
         Task { @MainActor in
             guard self.delegatesAttached else { return }
-            guard !self.roomClosed else { return }  // 既に閉じてぁE��場合�EスキチE�E
+            guard !self.roomClosed else { return }  // 既に閉じてぁE��場合�EスキチE�E
             guard let localMember = self.localMember else { return }
             if self.memberIdentifier(member) != self.localMemberIdentifier(localMember) {
                 print("[SkyMgr] memberDidLeave: remote member left, memberId=\(member.id)")
-                // 1対1通話なので相手が退出したら終亁E��ぁE
+                // 1対1通話なので相手が退出したら終亁E��ぁE
                 self.sessionDelegate?.connectDisconnect()
-                // ルームから退出してリソースをクリーンアチE�E
+                // ルームから退出してリソースをクリーンアチE�E
                 await self.leaveRoomIfNeeded()  // isConnectStarted = false はここで設定される
             }
         }
