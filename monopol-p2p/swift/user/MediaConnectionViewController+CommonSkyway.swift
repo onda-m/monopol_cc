@@ -1170,9 +1170,10 @@ extension MediaConnectionViewController{
 // MARK: - New SDK Entry Points (Phase2-4a)
 extension MediaConnectionViewController {
 
-    func joinRoomUsingNewSDK(roomId: String) {
-        print("[NewSDK][Phase2-4a] joinRoomUsingNewSDK called roomId=\(roomId)")
-        SkywayManager.sharedManager().connectStart(connectPeerId: roomId, delegate: self)
+    func joinRoomUsingNewSDK(roomName: String) {
+        // TODO: use stable castId as roomName (現在はキャストのpeerId=UUIDを使用)
+        print("[NewSDK][Phase2-4a] joinRoomUsingNewSDK called roomName=\(roomName)")
+        SkywayManager.sharedManager().connectStart(roomName: roomName, delegate: self)
     }
 }
 

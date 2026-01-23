@@ -25,10 +25,10 @@ protocol SkywaySessionDelegate: AnyObject {
 class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublicationDelegate, RoomSubscriptionDelegate {
 
     //API Key
-    static let apiKey: String = "<あなたのID>"
+    static let apiKey: String = "<あなた�EID>"
 
     //Domain
-    static let domain: String = "<あなたの指定したdomain>"
+    static let domain: String = "<あなた�E持E��したdomain>"
 
     private var room: Room?
     private var localMember: LocalRoomMember?
@@ -53,8 +53,9 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     private var roomTask: Task<Void, Never>?
     private var roomClosed = false
     private var peerId: String = ""
-    private var connectStart: Bool = false
-    private var sessionDelegate: SkywaySessionDelegate?
+    private var isConnectStarted: Bool = false
+    private weak var sessionDelegate: SkywaySessionDelegate?
+    private var subscribedPublicationIds: Set<String> = []
     //private var roomType: RoomType = .P2P
 
     class func sharedManager() -> SkywayManager {
@@ -66,6 +67,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     // MARK: Session
     func sessionStart(delegate: SkywaySessionDelegate) {
+        print("[SkyMgr] sessionStart called")
         sessionDelegate = delegate
         Task { @MainActor in
             do {
@@ -73,8 +75,10 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
                 if peerId.isEmpty {
                     peerId = UUID().uuidString
                 }
+                print("[SkyMgr] sessionStart success, peerId=\(peerId)")
                 delegate.sessionStart()
             } catch {
+                print("[SkyMgr] sessionStart error: \(error)")
                 delegate.connectError()
             }
         }
@@ -115,22 +119,39 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         }
     }
 
-    //通話開始要求
-    public func connectStart(connectPeerId: String, delegate: SkywaySessionDelegate) {
-        connectStart = true
+    /// ルームに参加し、ローカルストリームめEpublish する
+    /// - Parameters:
+    ///   - roomName: 参加するルーム名（キャスト�E場合�E自刁E�E peerId、ユーザーの場合�Eキャスト�E peerId�E�E
+    ///   - delegate: コールバック受信用チE��ゲーチE
+    public func connectStart(roomName: String, delegate: SkywaySessionDelegate) {
+        print("[SkyMgr] connectStart called, roomName=\(roomName), myPeerId=\(peerId)")
+
+        // 多重開始ガーチE 既に接続中の場合�EスキチE�E
+        if isConnectStarted && room != nil {
+            print("[SkyMgr] connectStart skipped: already connected (isConnectStarted=true, room exists)")
+            return
+        }
+
+        isConnectStarted = true
         sessionDelegate = delegate
         roomClosed = false
+        subscribedPublicationIds.removeAll()  // リセチE��
         roomTask?.cancel()
         roomTask = Task { @MainActor in
             await leaveRoomIfNeeded()
-            await joinRoomIfNeeded(roomName: connectPeerId, memberName: peerId)
+            guard !Task.isCancelled else {
+                print("[SkyMgr] connectStart Task cancelled before join")
+                isConnectStarted = false
+                return
+            }
+            await joinRoomIfNeeded(roomName: roomName, memberName: peerId)
         }
     }
 
     public func closeMedia(localView: UIView, remoteView: UIView) {
         localContainerView = localView
         remoteContainerView = remoteView
-        connectStart = false
+        isConnectStarted = false
         roomClosed = true
         roomTask?.cancel()
         roomTask = nil
@@ -181,21 +202,30 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     @MainActor
     private func joinRoomIfNeeded(roomName: String, memberName: String) async {
-        guard roomClosed == false else { return }
+        guard roomClosed == false else {
+            print("[SkyMgr] joinRoomIfNeeded skipped: roomClosed=true")
+            return
+        }
         do {
+            print("[SkyMgr] joinRoomIfNeeded start, roomName=\(roomName), memberName=\(memberName)")
             try await setupContextIfNeeded()
             let roomOptions = Room.InitOptions()
             roomOptions.name = roomName
             let room = try await P2PRoom.findOrCreate(with: roomOptions)
             self.room = room
+            print("[SkyMgr] P2PRoom.findOrCreate success, roomId=\(room.id ?? "nil"), name=\(room.name ?? "nil")")
             let memberOptions = Room.MemberInitOptions()
             memberOptions.name = memberName
             let localMember = try await room.join(with: memberOptions)
             self.localMember = localMember
+            print("[SkyMgr] room.join success, localMemberId=\(localMember.id), name=\(localMember.name ?? "nil")")
             attachRoomCallbacks(room: room, localMember: localMember)
             try await publishLocalStreams(localMember: localMember)
+            print("[SkyMgr] joinRoomIfNeeded complete, calling connectSucces")
             sessionDelegate?.connectSucces()
         } catch {
+            print("[SkyMgr] joinRoomIfNeeded error: \(error)")
+            isConnectStarted = false
             sessionDelegate?.connectError()
         }
     }
@@ -203,8 +233,12 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     @MainActor
     private func attachRoomCallbacks(room: Room, localMember: LocalRoomMember) {
         // Idempotent: skip if already attached
-        guard !delegatesAttached else { return }
+        guard !delegatesAttached else {
+            print("[SkyMgr] attachRoomCallbacks skipped: already attached")
+            return
+        }
         delegatesAttached = true
+        print("[SkyMgr] attachRoomCallbacks start")
 
         // Set room delegate
         room.delegate = self
@@ -224,25 +258,27 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
         // Auto-subscribe to existing remote publications
         let localMemberId = localMemberIdentifier(localMember)
-        for publication in room.publications {
-            if publicationPublisherIdentifier(publication) != localMemberId {
-                Task { @MainActor in
-                    await self.subscribeToPublication(publication, localMember: localMember)
-                }
+        let existingPubs = room.publications.filter { publicationPublisherIdentifier($0) != localMemberId }
+        print("[SkyMgr] existing remote publications count=\(existingPubs.count)")
+        for publication in existingPubs {
+            Task { @MainActor in
+                await self.subscribeToPublication(publication, localMember: localMember)
             }
         }
 
         // Check if remote members already present
-        for member in room.members {
-            if memberIdentifier(member) != localMemberId {
-                sessionDelegate?.remoteConnectSucces()
-                break
-            }
+        let remoteMembers = room.members.filter { memberIdentifier($0) != localMemberId }
+        print("[SkyMgr] existing remote members count=\(remoteMembers.count)")
+        if !remoteMembers.isEmpty {
+            print("[SkyMgr] remote member found, calling remoteConnectSucces")
+            sessionDelegate?.remoteConnectSucces()
         }
     }
 
     @MainActor
     private func detachRoomCallbacks() async {
+        print("[SkyMgr] detachRoomCallbacks start")
+
         // (a) Nil subscription delegates
         for (_, subscription) in roomSubscriptions {
             subscription.delegate = nil
@@ -256,34 +292,56 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         // (c) Unsubscribe all
         if let localMember = localMember {
             for (subscriptionId, _) in roomSubscriptions {
+                print("[SkyMgr] unsubscribe subId=\(subscriptionId)")
                 try? await localMember.unsubscribe(subscriptionId: subscriptionId)
             }
         }
-        roomSubscriptions.removeAll()
+        roomSubscriptions.removeAll()  // 忁E��E 二重処琁E��止
+        print("[SkyMgr] roomSubscriptions cleared")
 
         // (d) Unpublish all
         if let localMember = localMember {
             for (publicationId, _) in roomPublications {
+                print("[SkyMgr] unpublish pubId=\(publicationId)")
                 try? await localMember.unpublish(publicationId: publicationId)
             }
         }
-        roomPublications.removeAll()
+        roomPublications.removeAll()  // 忁E��E 二重処琁E��止
+        print("[SkyMgr] roomPublications cleared")
 
         // (e) Nil localMember delegate
         localMember?.delegate = nil
 
         // (f) Leave room
         if let localMember = localMember {
+            print("[SkyMgr] leaving room, memberId=\(localMember.id)")
             try? await localMember.leave()
         }
 
         // (g) Nil room delegate
         room?.delegate = nil
 
-        // (h) Clear references
+        // (h) Detach views first (while streams still exist), then clear streams
+        detachRemoteVideo()
+        remoteVideoStream = nil
+        remoteAudioStream = nil
+        remoteDataStream = nil
+        print("[SkyMgr] remote streams cleared")
+
+        // (i) Detach local views first, then clear local streams (再接続時は prepareLocalStreamsIfNeeded で再生戁E
+        detachLocalVideo()
+        localVideoStream = nil
+        localAudioStream = nil
+        localDataStream = nil
+        print("[SkyMgr] local streams cleared")
+
+        // (j) Clear references and reset guards
         self.localMember = nil
         self.room = nil
         delegatesAttached = false
+        isConnectStarted = false
+        subscribedPublicationIds.removeAll()
+        print("[SkyMgr] detachRoomCallbacks complete, delegatesAttached=false, isConnectStarted=false, subscribedPublicationIds cleared")
     }
 
     private func localMemberIdentifier(_ member: LocalRoomMember) -> String {
@@ -300,17 +358,21 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     @MainActor
     private func publishLocalStreams(localMember: LocalRoomMember) async throws {
+        print("[SkyMgr] publishLocalStreams start")
         await prepareLocalStreamsIfNeeded()
         if let localAudioStream = localAudioStream {
             let pub = try await localMember.publish(localAudioStream, options: RoomPublicationOptions())
             pub.delegate = self
             roomPublications[pub.id] = pub
+            print("[SkyMgr] published audio, pubId=\(pub.id)")
         }
         if let localVideoStream = localVideoStream {
             let pub = try await localMember.publish(localVideoStream, options: RoomPublicationOptions())
             pub.delegate = self
             roomPublications[pub.id] = pub
+            print("[SkyMgr] published video, pubId=\(pub.id)")
         }
+        print("[SkyMgr] publishLocalStreams complete, total publications=\(roomPublications.count)")
         // Data stream deferred for MVP
     }
 
@@ -343,32 +405,58 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     @MainActor
     private func subscribeToPublication(_ publication: RoomPublication, localMember: LocalRoomMember) async {
-        // Skip if already subscribed
-        let existingIds = Set(roomSubscriptions.keys)
+        let pubId = publication.id
+
+        // Guard: skip if already subscribed to this publication
+        if subscribedPublicationIds.contains(pubId) {
+            print("[SkyMgr] subscribeToPublication skipped: already subscribed pubId=\(pubId)")
+            return
+        }
+
+        // Also check SDK-side subscriptions
         for sub in localMember.subscriptions {
-            if sub.publication?.id == publication.id && existingIds.contains(sub.id) {
+            if sub.publication?.id == pubId {
+                print("[SkyMgr] subscribeToPublication skipped: SDK already has subscription for pubId=\(pubId)")
+                subscribedPublicationIds.insert(pubId)
+                if roomSubscriptions[sub.id] == nil {
+                    sub.delegate = self
+                    roomSubscriptions[sub.id] = sub
+                    handleStreamAttachment(subscription: sub)
+                }
                 return
             }
         }
 
+        // Mark as subscribing before await to prevent race
+        subscribedPublicationIds.insert(pubId)
+
         do {
-            let subscription = try await localMember.subscribe(publicationId: publication.id, options: nil)
+            print("[SkyMgr] subscribeToPublication start, pubId=\(pubId), contentType=\(publication.contentType)")
+            let subscription = try await localMember.subscribe(publicationId: pubId, options: nil)
             subscription.delegate = self
             roomSubscriptions[subscription.id] = subscription
+            print("[SkyMgr] subscribeToPublication success, subId=\(subscription.id), pubId=\(pubId)")
             handleStreamAttachment(subscription: subscription)
         } catch {
             // Subscription may fail if publication was canceled
+            print("[SkyMgr] subscribeToPublication failed, pubId=\(pubId), error=\(error)")
+            subscribedPublicationIds.remove(pubId)
         }
     }
 
     @MainActor
     private func handleStreamAttachment(subscription: RoomSubscription) {
-        guard let stream = subscription.stream else { return }
+        guard let stream = subscription.stream else {
+            print("[SkyMgr] handleStreamAttachment: stream is nil, will attach on didAttach event, subId=\(subscription.id)")
+            return
+        }
         if let videoStream = stream as? RemoteVideoStream {
+            print("[SkyMgr] handleStreamAttachment: attaching remote video, subId=\(subscription.id)")
             remoteVideoStream = videoStream
             attachRemoteVideo()
             sessionDelegate?.remoteConnectSucces()
         } else if let audioStream = stream as? RemoteAudioStream {
+            print("[SkyMgr] handleStreamAttachment: attaching remote audio, subId=\(subscription.id)")
             remoteAudioStream = audioStream
         }
         // Data stream deferred for MVP
@@ -413,20 +501,34 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         }
     }
 
+    /// Idempotent: safe to call multiple times, safe if views/streams are nil
     private func detachLocalVideo() {
-        if let localVideoView = localVideoView {
-            localVideoStream?.detach(localVideoView)
+        // Detach stream from view (safe even if either is nil)
+        if let view = localVideoView, let stream = localVideoStream {
+            stream.detach(view)
+            print("[SkyMgr] detachLocalVideo: stream detached from view")
         }
-        localVideoView?.removeFromSuperview()
-        localVideoView = nil
+        // Remove view from superview and clear reference
+        if let view = localVideoView {
+            view.removeFromSuperview()
+            localVideoView = nil
+            print("[SkyMgr] detachLocalVideo: view removed")
+        }
     }
 
+    /// Idempotent: safe to call multiple times, safe if views/streams are nil
     private func detachRemoteVideo() {
-        if let remoteVideoView = remoteVideoView {
-            remoteVideoStream?.detach(remoteVideoView)
+        // Detach stream from view (safe even if either is nil)
+        if let view = remoteVideoView, let stream = remoteVideoStream {
+            stream.detach(view)
+            print("[SkyMgr] detachRemoteVideo: stream detached from view")
         }
-        remoteVideoView?.removeFromSuperview()
-        remoteVideoView = nil
+        // Remove view from superview and clear reference
+        if let view = remoteVideoView {
+            view.removeFromSuperview()
+            remoteVideoView = nil
+            print("[SkyMgr] detachRemoteVideo: view removed")
+        }
     }
 
     // MARK: - RoomDelegate
@@ -434,8 +536,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     func roomDidClose(_ room: Room) {
         Task { @MainActor in
             guard self.delegatesAttached else { return }
-            await self.detachRoomCallbacks()
-            self.detachRemoteVideo()
+            print("[SkyMgr] roomDidClose")
+            await self.detachRoomCallbacks()  // isConnectStarted = false はここで設定される
             self.sessionDelegate?.connectEnd()
         }
     }
@@ -457,12 +559,14 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     func room(_ room: Room, memberDidLeave member: RoomMember) {
         Task { @MainActor in
             guard self.delegatesAttached else { return }
+            guard !self.roomClosed else { return }  // 既に閉じてぁE��場合�EスキチE�E
             guard let localMember = self.localMember else { return }
             if self.memberIdentifier(member) != self.localMemberIdentifier(localMember) {
-                self.detachRemoteVideo()
-                self.remoteVideoStream = nil
-                self.remoteAudioStream = nil
+                print("[SkyMgr] memberDidLeave: remote member left, memberId=\(member.id)")
+                // 1対1通話なので相手が退出したら終亁E��ぁE
                 self.sessionDelegate?.connectDisconnect()
+                // ルームから退出してリソースをクリーンアチE�E
+                await self.leaveRoomIfNeeded()  // isConnectStarted = false はここで設定される
             }
         }
     }

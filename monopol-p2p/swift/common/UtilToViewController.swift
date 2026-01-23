@@ -62,7 +62,11 @@ class UtilToViewController {
     
     
     
-    //ライブ配信画面への遷移処理
+    // ライブ配信画面への遷移処理
+    // TODO: 本番は roomName を引数で受け取る形にする
+    //   static func toMediaConnectionViewController(roomName: String) { ... }
+    //   呼び出し元（キャスト一覧）で選択したキャストに紐づく roomName を渡す
+    //   現在は UserDefaults(skyway_peer_id) を暫定利用
     static func toMediaConnectionViewController(){
         UserDefaults.standard.set(1, forKey: "selectedStreamerAuto")//1:通常、2:自動応答のどれを選んでいるか。
         //let selectedStreamerAuto = UserDefaults.standard.integer(forKey: "selectedStreamerAuto")
@@ -71,13 +75,15 @@ class UtilToViewController {
         let storyboard = UIStoryboard(name: "Main", bundle: nil)
         let mediaConnectionView: MediaConnectionViewController = storyboard.instantiateViewController(withIdentifier: "toMediaConnectionViewController") as! MediaConnectionViewController
 
-        // Phase2-4c-3: Wait側のpeerIdをセット（ログ付き）
-        let peerId = UserDefaults.standard.string(forKey: "skyway_peer_id") ?? ""
-        print("[NewSDK][Phase2-4c-3] inject targetPeerId from UserDefaults skyway_peer_id=\(peerId)")
-        if peerId.isEmpty {
-            print("[NewSDK][Phase2-4c-3] WARN: skyway_peer_id is empty. Open Wait screen first to generate peerId.")
+        // 新SDK: キャスト一覧ボタン選択時に roomName をセット
+        // TODO: use stable castId as roomName (現在はキャストのpeerId=UUIDを暫定使用)
+        // 本番では引数 roomName を使用: mediaConnectionView.targetRoomName = roomName
+        let roomName = UserDefaults.standard.string(forKey: "skyway_peer_id") ?? ""
+        print("[NewSDK] selected roomName=\(roomName) (from UserDefaults skyway_peer_id)")
+        if roomName.isEmpty {
+            print("[NewSDK] WARN: roomName is empty. Cast must open Wait screen first to generate peerId.")
         }
-        mediaConnectionView.targetPeerId = peerId
+        mediaConnectionView.targetRoomName = roomName
 
         // 下記を追加する
         mediaConnectionView.modalPresentationStyle = .fullScreen
@@ -86,7 +92,9 @@ class UtilToViewController {
         topController?.present(mediaConnectionView, animated: false, completion: nil)
     }
 
-    //ライブ配信画面への遷移処理(自動応答ユーザー用)
+    // ライブ配信画面への遷移処理(自動応答ユーザー用)
+    // TODO: 本番は roomName を引数で受け取る形にする
+    //   static func toMediaConnectionViewControllerAuto(roomName: String) { ... }
     static func toMediaConnectionViewControllerAuto(){
         UserDefaults.standard.set(2, forKey: "selectedStreamerAuto")//1:通常、2:自動応答のどれを選んでいるか。
         //let selectedStreamerAuto = UserDefaults.standard.integer(forKey: "selectedStreamerAuto")
@@ -95,13 +103,15 @@ class UtilToViewController {
         let storyboard = UIStoryboard(name: "Main", bundle: nil)
         let mediaConnectionView: MediaConnectionViewController = storyboard.instantiateViewController(withIdentifier: "toMediaConnectionViewController") as! MediaConnectionViewController
 
-        // Phase2-4c-3: Wait側のpeerIdをセット（ログ付き）
-        let peerId = UserDefaults.standard.string(forKey: "skyway_peer_id") ?? ""
-        print("[NewSDK][Phase2-4c-3] inject targetPeerId from UserDefaults skyway_peer_id=\(peerId)")
-        if peerId.isEmpty {
-            print("[NewSDK][Phase2-4c-3] WARN: skyway_peer_id is empty. Open Wait screen first to generate peerId.")
+        // 新SDK: キャスト一覧ボタン選択時に roomName をセット
+        // TODO: use stable castId as roomName (現在はキャストのpeerId=UUIDを暫定使用)
+        // 本番では引数 roomName を使用: mediaConnectionView.targetRoomName = roomName
+        let roomName = UserDefaults.standard.string(forKey: "skyway_peer_id") ?? ""
+        print("[NewSDK] selected roomName=\(roomName) (from UserDefaults skyway_peer_id)")
+        if roomName.isEmpty {
+            print("[NewSDK] WARN: roomName is empty. Cast must open Wait screen first to generate peerId.")
         }
-        mediaConnectionView.targetPeerId = peerId
+        mediaConnectionView.targetRoomName = roomName
 
         // 下記を追加する
         mediaConnectionView.modalPresentationStyle = .fullScreen

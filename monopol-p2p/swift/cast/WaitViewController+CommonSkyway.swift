@@ -912,14 +912,63 @@ extension WaitViewController: SkywaySessionDelegate {
     func sessionStart() {
         let peerId = SkywayManager.sharedManager().getPeerId()
         print("[NewSDK] WaitViewController: sessionStart")
-        print("[NewSDK][Phase2-3] 参加に必要な識別子 (peerId): \(peerId)")
-        // Phase2-4c-2: peerId を UserDefaults に保存（参加側で使用）
+        print("[NewSDK] peerId generated: \(peerId)")
+
+        // peerId を UserDefaults に保存（ユーザー側で部屋選択時に使用）
+        // TODO: use stable castId as roomName (現在はpeerId=UUIDを暫定使用)
         UserDefaults.standard.set(peerId, forKey: "skyway_peer_id")
-        print("[NewSDK][Phase2-4d] saved skyway_peer_id to UserDefaults: \(peerId)")
+        print("[NewSDK] saved skyway_peer_id to UserDefaults: \(peerId)")
+
+        // キャスト側もルームに参加 + publish（自分の peerId をルーム名として使用）
+        // TODO: use stable castId as roomName
+        let roomName = peerId
+        print("[NewSDK] WaitViewController: joining room as host, roomName=\(roomName)")
+        SkywayManager.sharedManager().connectStart(roomName: roomName, delegate: self)
     }
-    func connectSucces() { print("[NewSDK] WaitViewController: connectSucces") }
-    func remoteConnectSucces() { print("[NewSDK] WaitViewController: remoteConnectSucces") }
-    func connectDisconnect() { print("[NewSDK] WaitViewController: connectDisconnect") }
-    func connectEnd() { print("[NewSDK] WaitViewController: connectEnd") }
-    func connectError() { print("[NewSDK] WaitViewController: connectError") }
+    func connectSucces() {
+        print("[NewSDK] WaitViewController: connectSucces - 待機完了、ユーザー参加待ち")
+    }
+    func remoteConnectSucces() {
+        print("[NewSDK] WaitViewController: remoteConnectSucces - ユーザーが参加しました")
+        // 多重実行ガード
+        guard !isLiveConnectionStarted else {
+            print("[NewSDK] WaitViewController: remoteConnectSucces skipped - already started")
+            return
+        }
+        isLiveConnectionStarted = true
+        print("[NewSDK] WaitViewController: isLiveConnectionStarted = true")
+        // ここで startConnection() 相当の処理を呼ぶ（UI更新など）
+        Task { @MainActor in
+            self.startConnection()
+        }
+    }
+    func connectDisconnect() {
+        // 注意: このコールバックはUI更新のみに留める
+        // SkywayManager の操作（connectStart等）は行わない（memberDidLeave内のleaveRoomIfNeededと競合するため）
+        // 再接続が必要な場合は connectEnd() 後に別途トリガーする
+        isLiveConnectionStarted = false
+        print("[NewSDK] WaitViewController: connectDisconnect - isLiveConnectionStarted = false")
+        Task { @MainActor in
+            self.returnToWaitingUI()
+        }
+    }
+
+    /// ユーザー退出後の待機画面復帰処理（UI更新のみ）
+    @MainActor
+    private func returnToWaitingUI() {
+        isLiveConnectionStarted = false  // 念のため保証
+        print("[NewSDK] WaitViewController: returnToWaitingUI - 待機画面へ復帰")
+        // TODO: 待機画面への復帰UI処理を実装
+        // 例: カウントダウン非表示、ユーザーアイコン非表示、待機ダイアログ表示など
+        // self.countDownLabel.isHidden = true
+        // self.userIconImageView.isHidden = true
+        // self.castWaitDialog.waitDialogView.isHidden = false
+    }
+    func connectEnd() {
+        isLiveConnectionStarted = false
+        print("[NewSDK] WaitViewController: connectEnd - ルームが閉じられました, isLiveConnectionStarted = false")
+    }
+    func connectError() {
+        print("[NewSDK] WaitViewController: connectError - 接続エラー")
+    }
 }
