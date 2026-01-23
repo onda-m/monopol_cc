@@ -1166,3 +1166,22 @@ extension MediaConnectionViewController{
         UtilFunc.saveChatRireki(type:3, from_user_id:0, to_user_id:self.user_id, present_id:0, chat_text:send_text, status:1)
     }
 }
+
+// MARK: - New SDK Entry Points (Phase2-4a)
+extension MediaConnectionViewController {
+
+    func joinRoomUsingNewSDK(roomId: String) {
+        print("[NewSDK][Phase2-4a] joinRoomUsingNewSDK called roomId=\(roomId)")
+        SkywayManager.sharedManager().connectStart(connectPeerId: roomId, delegate: self)
+    }
+}
+
+// MARK: - SkywaySessionDelegate (Phase2-4a)
+extension MediaConnectionViewController: SkywaySessionDelegate {
+    func sessionStart() { print("[NewSDK] MediaConnectionViewController: sessionStart") }
+    func connectSucces() { print("[NewSDK] MediaConnectionViewController: connectSucces") }
+    func remoteConnectSucces() { print("[NewSDK] MediaConnectionViewController: remoteConnectSucces") }
+    func connectDisconnect() { print("[NewSDK] MediaConnectionViewController: connectDisconnect") }
+    func connectEnd() { print("[NewSDK] MediaConnectionViewController: connectEnd") }
+    func connectError() { print("[NewSDK] MediaConnectionViewController: connectError") }
+}

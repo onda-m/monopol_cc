@@ -240,6 +240,7 @@
 		BF6AF47C26D471DB006CFE5E /* CreateEventViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF6AF47B26D471DB006CFE5E /* CreateEventViewController.swift */; };
 		BF6AF47E26D47808006CFE5E /* CreateEventCheckViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF6AF47D26D47808006CFE5E /* CreateEventCheckViewController.swift */; };
 		BF6AF49F26DD8BF8006CFE5E /* StreamerInfo.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = BF6AF49E26DD8BF8006CFE5E /* StreamerInfo.storyboard */; };
+		BFC2FE772F23B89B009238C9 /* SkywayManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2FE762F23B89B009238C9 /* SkywayManager.swift */; };
 		BFC95CCA26E1DF9A00A413E6 /* MyEventCheckViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC95CC926E1DF9A00A413E6 /* MyEventCheckViewController.swift */; };
 /* End PBXBuildFile section */
 
@@ -505,6 +506,7 @@
 		BF6AF47B26D471DB006CFE5E /* CreateEventViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateEventViewController.swift; sourceTree = "<group>"; };
 		BF6AF47D26D47808006CFE5E /* CreateEventCheckViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateEventCheckViewController.swift; sourceTree = "<group>"; };
 		BF6AF49E26DD8BF8006CFE5E /* StreamerInfo.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = StreamerInfo.storyboard; sourceTree = "<group>"; };
+		BFC2FE762F23B89B009238C9 /* SkywayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SkywayManager.swift; path = swift/SkywayManager.swift; sourceTree = "<group>"; };
 		BFC95CC926E1DF9A00A413E6 /* MyEventCheckViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyEventCheckViewController.swift; sourceTree = "<group>"; };
 		E8C83DA7BB5AD47D02EBF56D /* Pods-swift_skyway.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-swift_skyway.debug.xcconfig"; path = "Target Support Files/Pods-swift_skyway/Pods-swift_skyway.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -525,6 +527,7 @@
 		6F0196D01FB932C0003D22D2 = {
 			isa = PBXGroup;
 			children = (
+				BFC2FE762F23B89B009238C9 /* SkywayManager.swift */,
 				A347A70320A5C4400098034D /* swift_skyway.entitlements */,
 				A38ACC7024F8CABA00F6424E /* swift_skyway-Bridging-Header.h */,
 				6F0196DB1FB932C0003D22D2 /* swift */,
@@ -942,7 +945,6 @@
 				E8C83DA7BB5AD47D02EBF56D /* Pods-swift_skyway.debug.xcconfig */,
 				6BF294BFC37D2D86AC140AA2 /* Pods-swift_skyway.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -1109,9 +1111,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-swift_skyway/Pods-swift_skyway-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-swift_skyway/Pods-swift_skyway-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -1193,6 +1199,7 @@
 				A3065DB720D2366500236638 /* LiveRirekiViewController.swift in Sources */,
 				A33D48CA209B2DDC00CC78B9 /* AsyncImageView.swift in Sources */,
 				A3DE2BB020B3817F00C3315F /* LiveChatViewCell.swift in Sources */,
+				BFC2FE772F23B89B009238C9 /* SkywayManager.swift in Sources */,
 				A38ACC7224F8CABE00F6424E /* swift_skyway-Bridging-Header.m in Sources */,
 				A391D3C72083ED1F00283D20 /* PurchaseViewController.swift in Sources */,
 				A3065DC920D7C5D400236638 /* MainRankingViewController.swift in Sources */,

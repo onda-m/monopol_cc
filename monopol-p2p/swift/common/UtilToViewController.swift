@@ -66,30 +66,46 @@ class UtilToViewController {
     static func toMediaConnectionViewController(){
         UserDefaults.standard.set(1, forKey: "selectedStreamerAuto")//1:通常、2:自動応答のどれを選んでいるか。
         //let selectedStreamerAuto = UserDefaults.standard.integer(forKey: "selectedStreamerAuto")
-        
+
         //Storyboardを指定
         let storyboard = UIStoryboard(name: "Main", bundle: nil)
         let mediaConnectionView: MediaConnectionViewController = storyboard.instantiateViewController(withIdentifier: "toMediaConnectionViewController") as! MediaConnectionViewController
-        
+
+        // Phase2-4c-3: Wait側のpeerIdをセット（ログ付き）
+        let peerId = UserDefaults.standard.string(forKey: "skyway_peer_id") ?? ""
+        print("[NewSDK][Phase2-4c-3] inject targetPeerId from UserDefaults skyway_peer_id=\(peerId)")
+        if peerId.isEmpty {
+            print("[NewSDK][Phase2-4c-3] WARN: skyway_peer_id is empty. Open Wait screen first to generate peerId.")
+        }
+        mediaConnectionView.targetPeerId = peerId
+
         // 下記を追加する
         mediaConnectionView.modalPresentationStyle = .fullScreen
-        
+
         let topController = UIApplication.topViewController()
         topController?.present(mediaConnectionView, animated: false, completion: nil)
     }
-    
+
     //ライブ配信画面への遷移処理(自動応答ユーザー用)
     static func toMediaConnectionViewControllerAuto(){
         UserDefaults.standard.set(2, forKey: "selectedStreamerAuto")//1:通常、2:自動応答のどれを選んでいるか。
         //let selectedStreamerAuto = UserDefaults.standard.integer(forKey: "selectedStreamerAuto")
-        
+
         //Storyboardを指定
         let storyboard = UIStoryboard(name: "Main", bundle: nil)
         let mediaConnectionView: MediaConnectionViewController = storyboard.instantiateViewController(withIdentifier: "toMediaConnectionViewController") as! MediaConnectionViewController
-        
+
+        // Phase2-4c-3: Wait側のpeerIdをセット（ログ付き）
+        let peerId = UserDefaults.standard.string(forKey: "skyway_peer_id") ?? ""
+        print("[NewSDK][Phase2-4c-3] inject targetPeerId from UserDefaults skyway_peer_id=\(peerId)")
+        if peerId.isEmpty {
+            print("[NewSDK][Phase2-4c-3] WARN: skyway_peer_id is empty. Open Wait screen first to generate peerId.")
+        }
+        mediaConnectionView.targetPeerId = peerId
+
         // 下記を追加する
         mediaConnectionView.modalPresentationStyle = .fullScreen
-        
+
         let topController = UIApplication.topViewController()
         topController?.present(mediaConnectionView, animated: false, completion: nil)
     }

@@ -249,6 +249,11 @@ class MediaConnectionViewController: UIViewController,UITextViewDelegate ,UITabB
     //var sendText:String = ""
     var liveCastId:String = ""//キャストのユーザーID
 
+    // Phase2-4b: 新SDK切替フラグ
+    private let useNewSDK = true
+    // Phase2-4c: Wait側のpeerId(UUID)を入れる
+    var targetPeerId: String = ""
+
     var user_id: Int = 0//自分のID
     var my_photo_flg: Int = 0
     var my_photo_name: String = "0"
@@ -605,8 +610,19 @@ class MediaConnectionViewController: UIViewController,UITextViewDelegate ,UITabB
             }
             // 全ての非同期処理完了後にメインスレッドで処理
             dispatchGroup.notify(queue: .main) {
-                //skywayの待機処理(一度待機状態へ)
-                self.setup()
+                // Phase2-4c: 新SDK分岐
+                if self.useNewSDK {
+                    let roomId = self.targetPeerId
+                    print("[NewSDK][Phase2-4c] useNewSDK=true targetPeerId(roomId)=\(roomId)")
+                    if roomId.isEmpty {
+                        print("[NewSDK][Phase2-4c] ERROR: targetPeerId is empty. Paste Wait peerId(UUID) before joining.")
+                        return
+                    }
+                    self.joinRoomUsingNewSDK(roomId: roomId)
+                } else {
+                    //skywayの待機処理(一度待機状態へ)
+                    self.setup()
+                }
                 
                 //メッセージの初期化
                 self.messages.removeAll()

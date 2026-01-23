@@ -8,6 +8,7 @@
 
 import Foundation
 import UIKit
+import AVFoundation
 import SkyWayRoom
 
 private var instance: SkywayManager? = nil
@@ -40,7 +41,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     private var microphoneAudioSource: MicrophoneAudioSource?
     private var cameraVideoSource: CameraVideoSource?
     private var dataSource: DataSource?
-    private var cameraDevice: CameraVideoSource.Camera?
+    private var cameraDevice: AVCaptureDevice?
+    private var contextSetupDone: Bool = false
     private var remoteVideoStream: RemoteVideoStream?
     private var remoteAudioStream: RemoteAudioStream?
     private var remoteDataStream: RemoteDataStream?
@@ -67,13 +69,35 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         sessionDelegate = delegate
         Task { @MainActor in
             do {
-                try await Util.setupSkyWayRoomContextIfNeeded()
+                try await setupContextIfNeeded()
                 if peerId.isEmpty {
                     peerId = UUID().uuidString
                 }
                 delegate.sessionStart()
             } catch {
                 delegate.connectError()
+            }
+        }
+    }
+
+    @MainActor
+    private func setupContextIfNeeded() async throws {
+        guard !contextSetupDone && !Context.isSetup else {
+            contextSetupDone = true
+            return
+        }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            Context.setupForDev(
+                withAppId: SkywayManager.apiKey,
+                secretKey: SkywayManager.domain,
+                options: nil
+            ) { error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    self.contextSetupDone = true
+                    continuation.resume()
+                }
             }
         }
     }
@@ -139,7 +163,15 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     public func setLocalVideoEnabled(_ enabled: Bool) {
-        localVideoStream?.enabled = enabled
+        // Enable/disable is done via the publication, not the stream
+        guard let videoPublication = roomPublications.values.first(where: { $0.contentType == .video }) else { return }
+        Task {
+            if enabled {
+                try? await videoPublication.enable()
+            } else {
+                try? await videoPublication.disable()
+            }
+        }
     }
 
     func setRemoteView(remoteView: UIView) {
@@ -151,13 +183,14 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     private func joinRoomIfNeeded(roomName: String, memberName: String) async {
         guard roomClosed == false else { return }
         do {
-            try await Util.setupSkyWayRoomContextIfNeeded()
+            try await setupContextIfNeeded()
             let roomOptions = Room.InitOptions()
             roomOptions.name = roomName
-            //roomOptions.type = .p2p
-            let room = try await Room.findOrCreate(with: roomOptions)
+            let room = try await P2PRoom.findOrCreate(with: roomOptions)
             self.room = room
-            let localMember = try await room.join(withName: memberName)
+            let memberOptions = Room.MemberInitOptions()
+            memberOptions.name = memberName
+            let localMember = try await room.join(with: memberOptions)
             self.localMember = localMember
             attachRoomCallbacks(room: room, localMember: localMember)
             try await publishLocalStreams(localMember: localMember)
@@ -362,7 +395,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             }
         }
         if let localVideoStream = localVideoStream, let localVideoView = localVideoView {
-            localVideoStream.addRenderer(localVideoView)
+            localVideoStream.attach(localVideoView)
         }
     }
 
@@ -376,13 +409,13 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             }
         }
         if let remoteVideoStream = remoteVideoStream, let remoteVideoView = remoteVideoView {
-            remoteVideoStream.addRenderer(remoteVideoView)
+            remoteVideoStream.attach(remoteVideoView)
         }
     }
 
     private func detachLocalVideo() {
         if let localVideoView = localVideoView {
-            localVideoStream?.removeRenderer(localVideoView)
+            localVideoStream?.detach(localVideoView)
         }
         localVideoView?.removeFromSuperview()
         localVideoView = nil
@@ -390,7 +423,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     private func detachRemoteVideo() {
         if let remoteVideoView = remoteVideoView {
-            remoteVideoStream?.removeRenderer(remoteVideoView)
+            remoteVideoStream?.detach(remoteVideoView)
         }
         remoteVideoView?.removeFromSuperview()
         remoteVideoView = nil

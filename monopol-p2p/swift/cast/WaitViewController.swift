@@ -150,6 +150,9 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     
     var user_id:Int=0//自分のユーザーID
 
+    // Phase2-2: 新SDK切替フラグ
+    private let useNewSDK = true
+
     /*
      *********相手の情報を格納(一部)*********
      *********全格納はOnLiveUserInfoへ*********
@@ -545,6 +548,12 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     }
     
     func setWait(){
+        // Phase2-2: 新SDK分岐
+        if useNewSDK {
+            startWaitingUsingNewSDK()
+            return
+        }
+
         //エフェクトの初期化
         self.effectCheckDoForWait(cast_id:self.user_id)
         

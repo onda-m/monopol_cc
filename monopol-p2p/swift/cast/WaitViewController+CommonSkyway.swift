@@ -882,3 +882,44 @@ extension WaitViewController{
         }
     }
 }
+
+// MARK: - New SDK Entry Points (Phase1)
+extension WaitViewController {
+
+    func startWaitingUsingNewSDK() {
+        print("[NewSDK][MVP] startWaitingUsingNewSDK triggered")
+        print("[NewSDK][MVP] calling SkywayManager.setWaitLocal")
+        SkywayManager.sharedManager().setWaitLocal(localView: self.localStreamView, delegate: self)
+        print("[NewSDK][MVP] calling SkywayManager.setRemoteView")
+        SkywayManager.sharedManager().setRemoteView(remoteView: self.remoteStreamView)
+        print("[NewSDK][MVP] calling SkywayManager.sessionStart")
+        SkywayManager.sharedManager().sessionStart(delegate: self)
+    }
+
+    func closeMediaUsingNewSDK() {
+        // TODO (Phase2-2): SkywayManager 経由でメディア切断へ接続する
+        print("[NewSDK][Phase1] closeMediaUsingNewSDK called")
+    }
+
+    func sessionCloseUsingNewSDK() {
+        // TODO (Phase2-2): SkywayManager 経由でセッション終了へ接続する
+        print("[NewSDK][Phase1] sessionCloseUsingNewSDK called")
+    }
+}
+
+// MARK: - SkywaySessionDelegate (Phase2-4c-2)
+extension WaitViewController: SkywaySessionDelegate {
+    func sessionStart() {
+        let peerId = SkywayManager.sharedManager().getPeerId()
+        print("[NewSDK] WaitViewController: sessionStart")
+        print("[NewSDK][Phase2-3] 参加に必要な識別子 (peerId): \(peerId)")
+        // Phase2-4c-2: peerId を UserDefaults に保存（参加側で使用）
+        UserDefaults.standard.set(peerId, forKey: "skyway_peer_id")
+        print("[NewSDK][Phase2-4d] saved skyway_peer_id to UserDefaults: \(peerId)")
+    }
+    func connectSucces() { print("[NewSDK] WaitViewController: connectSucces") }
+    func remoteConnectSucces() { print("[NewSDK] WaitViewController: remoteConnectSucces") }
+    func connectDisconnect() { print("[NewSDK] WaitViewController: connectDisconnect") }
+    func connectEnd() { print("[NewSDK] WaitViewController: connectEnd") }
+    func connectError() { print("[NewSDK] WaitViewController: connectError") }
+}
