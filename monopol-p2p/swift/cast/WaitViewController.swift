@@ -153,7 +153,8 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     // Phase2-2: 新SDK切替フラグ
     private let useNewSDK = true
     // 新SDK: startConnection() 多重実行防止フラグ
-    private var isLiveConnectionStarted = false
+    // Note: extension (別ファイル) からアクセスするため internal スコープ
+    var isLiveConnectionStarted = false
 
     /*
      *********相手の情報を格納(一部)*********
