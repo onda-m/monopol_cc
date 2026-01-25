@@ -24,11 +24,9 @@ protocol SkywaySessionDelegate: AnyObject {
 
 class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublicationDelegate, RoomSubscriptionDelegate {
 
-    //API Key
-    static let apiKey: String = "<あなた�EID>"
-
-    //Domain
-    static let domain: String = "<あなた�E持E��したdomain>"
+    // 開発用固定JWT（SkyWay Console で取得）
+    // TODO: 本番では動的にトークンを取得する仕組みに置き換える
+    private let devSkywayToken: String = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI2ZDYzOWEzOC0xMzIxLTQ0NzQtYThmMS05NDZjM2E0ZTA0M2UiLCJpYXQiOjE3NjkzNTY3NjUsImV4cCI6MTc3MTk0ODc2NSwic2NvcGUiOnsiYXBwIjp7ImlkIjoiWU9VUl9BUFBfSUQiLCJhY3Rpb25zIjpbInJlYWQiXSwidHVybiI6dHJ1ZX19fQ.3FhfOCZp2CPCDIWXGgj7JoFl6G7YVqUpN-FNS3X-Hc0"
 
     private var room: Room?
     private var localMember: LocalRoomMember?
@@ -90,20 +88,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             contextSetupDone = true
             return
         }
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            Context.setupForDev(
-                withAppId: SkywayManager.apiKey,
-                secretKey: SkywayManager.domain,
-                options: nil
-            ) { error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                } else {
-                    self.contextSetupDone = true
-                    continuation.resume()
-                }
-            }
-        }
+        try await Context.setup(withToken: devSkywayToken)
+        contextSetupDone = true
     }
 
     func getPeerId() -> String {
