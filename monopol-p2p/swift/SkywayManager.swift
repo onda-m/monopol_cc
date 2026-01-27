@@ -88,7 +88,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             contextSetupDone = true
             return
         }
-        try await Context.setup(withToken: devSkywayToken)
+        try await Context.setup(withToken: devSkywayToken, options: nil)
         contextSetupDone = true
     }
 
