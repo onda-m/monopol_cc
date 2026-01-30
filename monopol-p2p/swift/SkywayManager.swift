@@ -84,13 +84,18 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     @MainActor
     private func setupContextIfNeeded() async throws {
-        guard !contextSetupDone && !Context.isSetup else {
-            contextSetupDone = true
+        guard !contextSetupDone else {
             return
         }
+        print("[SkyMgr] Context setup start (reset)")
         logTokenExpiry()
+        // Dispose stale context if it exists (e.g., previous dispose failed)
+        if Context.isSetup {
+            try? await Context.dispose()
+        }
         try await Context.setup(withToken: devSkywayToken, options: nil)
         contextSetupDone = true
+        print("[SkyMgr] Context setup completed")
     }
 
     /// JWT の exp / iat を安全にログ出力する（トークン全文は出さない）
@@ -109,10 +114,10 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             print("[SkyMgr] token check: failed to decode payload")
             return
         }
-        let exp = json["exp"] as? Int ?? 0
-        let iat = json["iat"] as? Int ?? 0
-        let now = Int(Date().timeIntervalSince1970)
-        print("[SkyMgr] token check: iat=\(iat), exp=\(exp), now=\(now), remaining=\(exp - now)s")
+        //let exp = json["exp"] as? Int ?? 0
+        //let iat = json["iat"] as? Int ?? 0
+        //let now = Int(Date().timeIntervalSince1970)
+        //print("[SkyMgr] token check: iat=\(iat), exp=\(exp), now=\(now), remaining=\(exp - now)s")
     }
 
     func getPeerId() -> String {
@@ -162,6 +167,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         remoteContainerView = remoteView
         isConnectStarted = false
         roomClosed = true
+        contextSetupDone = false  // Synchronous reset (async detachRoomCallbacks also resets)
         roomTask?.cancel()
         roomTask = nil
         Task { @MainActor in
@@ -350,6 +356,10 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         delegatesAttached = false
         isConnectStarted = false
         subscribedPublicationIds.removeAll()
+
+        // (k) Reset Context flag so next sessionStart re-runs Context.setup
+        contextSetupDone = false
+        print("[SkyMgr] Context reset on disconnect")
         print("[SkyMgr] detachRoomCallbacks complete, delegatesAttached=false, isConnectStarted=false, subscribedPublicationIds cleared")
     }
 
