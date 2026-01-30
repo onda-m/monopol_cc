@@ -130,14 +130,24 @@ extension WaitViewController{
     }
     
     func sessionClose() {
-        self.peer!.on(.PEER_EVENT_OPEN, callback: nil)
-        self.peer!.on(.PEER_EVENT_CLOSE, callback: nil)
-        self.peer!.on(.PEER_EVENT_CALL, callback: nil)
-        self.peer!.on(.PEER_EVENT_DISCONNECTED, callback: nil)
-        self.peer!.on(.PEER_EVENT_ERROR, callback: nil)
+        defer { isLiveConnectionStarted = false }
 
-        self.peer!.destroy()
-        self.peer = nil
+        // 旧 Peer SDK クリーンアップ（peer が存在する場合のみ）
+        if let peer = self.peer {
+            peer.on(.PEER_EVENT_OPEN, callback: nil)
+            peer.on(.PEER_EVENT_CLOSE, callback: nil)
+            peer.on(.PEER_EVENT_CALL, callback: nil)
+            peer.on(.PEER_EVENT_DISCONNECTED, callback: nil)
+            peer.on(.PEER_EVENT_ERROR, callback: nil)
+            peer.destroy()
+            self.peer = nil
+        }
+
+        // 新 SDK 後始末（room/member が nil でも安全、idempotent）
+        // leaveRoomIfNeeded() 内で detachRoomCallbacks() も実行される
+        Task { @MainActor in
+            await SkywayManager.sharedManager().leaveRoomIfNeeded()
+        }
     }
     
     //type=0:初期化あり(最初一度だけ実行)

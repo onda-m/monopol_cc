@@ -262,7 +262,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     @MainActor
-    private func detachRoomCallbacks() async {
+    func detachRoomCallbacks() async {
         print("[SkyMgr] detachRoomCallbacks start")
 
         // (a) Nil subscription delegates
@@ -449,7 +449,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     @MainActor
-    private func leaveRoomIfNeeded() async {
+    func leaveRoomIfNeeded() async {
         await detachRoomCallbacks()
         roomClosed = true
     }
