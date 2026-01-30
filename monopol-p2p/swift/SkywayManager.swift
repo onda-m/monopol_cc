@@ -26,7 +26,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     // 開発用固定JWT（SkyWay Console で取得）
     // TODO: 本番では動的にトークンを取得する仕組みに置き換える
-    private let devSkywayToken: String = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI2ZDYzOWEzOC0xMzIxLTQ0NzQtYThmMS05NDZjM2E0ZTA0M2UiLCJpYXQiOjE3NjkzNTY3NjUsImV4cCI6MTc3MTk0ODc2NSwic2NvcGUiOnsiYXBwIjp7ImlkIjoiWU9VUl9BUFBfSUQiLCJhY3Rpb25zIjpbInJlYWQiXSwidHVybiI6dHJ1ZX19fQ.3FhfOCZp2CPCDIWXGgj7JoFl6G7YVqUpN-FNS3X-Hc0"
+    private let devSkywayToken: String = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlMDVjNTNhZS0yOTM0LTQ1ZDUtODcwZS0yMjZiNDJmMTQ3NzAiLCJpYXQiOjE3Njk3OTI1MzUsImV4cCI6MjA4NTE1MjUzNSwic2NvcGUiOnsiYXBwIjp7ImlkIjoiYTQxMDAxNDMtYTA1Mi00NDQzLTllMTAtNWFjY2E1ZDhhMmYyIiwidHVybiI6dHJ1ZSwiYWN0aW9ucyI6WyJyZWFkIiwid3JpdGUiXX0sInJvb21zIjp7Im5hbWUiOiIqIiwiYWN0aW9ucyI6WyJyZWFkIiwid3JpdGUiXSwibWVtYmVycyI6W3siaWQiOiIqIiwibmFtZSI6IioiLCJhY3Rpb25zIjpbIndyaXRlIl0sInB1YmxpY2F0aW9uIjp7ImFjdGlvbnMiOlsid3JpdGUiXX0sInN1YnNjcmlwdGlvbiI6eyJhY3Rpb25zIjpbIndyaXRlIl19fV19fX0.J6YGPkUQFV2xhS4Bs5PifrxIUSNxhptoeazssVcKKas"
 
     private var room: Room?
     private var localMember: LocalRoomMember?
@@ -88,8 +88,31 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             contextSetupDone = true
             return
         }
+        logTokenExpiry()
         try await Context.setup(withToken: devSkywayToken, options: nil)
         contextSetupDone = true
+    }
+
+    /// JWT の exp / iat を安全にログ出力する（トークン全文は出さない）
+    private func logTokenExpiry() {
+        let parts = devSkywayToken.split(separator: ".")
+        guard parts.count >= 2 else {
+            print("[SkyMgr] token check: invalid JWT format")
+            return
+        }
+        var base64 = String(parts[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        while base64.count % 4 != 0 { base64.append("=") }
+        guard let data = Data(base64Encoded: base64),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            print("[SkyMgr] token check: failed to decode payload")
+            return
+        }
+        let exp = json["exp"] as? Int ?? 0
+        let iat = json["iat"] as? Int ?? 0
+        let now = Int(Date().timeIntervalSince1970)
+        print("[SkyMgr] token check: iat=\(iat), exp=\(exp), now=\(now), remaining=\(exp - now)s")
     }
 
     func getPeerId() -> String {
