@@ -11,10 +11,13 @@
 //   export SKYWAY_SECRET_KEY="your-secret-key-from-console"
 //   node generate-skyway-token.js
 //
+//   # Swift に貼り付ける用（stdout にトークン1行だけ出力）:
+//   node generate-skyway-token.js --print-token-for-swift
+//
 //   # Payload も確認したい場合:
 //   node generate-skyway-token.js --show-payload
 //
-//   # ファイルに書き出す場合（stdout にはトークンを出さない）:
+//   # ファイルに書き出す場合:
 //   node generate-skyway-token.js --out ../path/to/skyway_token.txt
 //
 // .env ファイル例 (dotenv 等を使う場合):
@@ -40,6 +43,7 @@ if (!APP_ID || !SECRET_KEY) {
 }
 
 const showPayload = process.argv.includes("--show-payload");
+const printForSwift = process.argv.includes("--print-token-for-swift");
 const outIdx = process.argv.indexOf("--out");
 const outPath = outIdx >= 0 && outIdx + 1 < process.argv.length ? process.argv[outIdx + 1] : null;
 
@@ -88,8 +92,12 @@ if (outPath) {
   const fs = require("fs");
   fs.writeFileSync(outPath, token, "utf8");
   console.error("[generate-skyway-token] written to: " + outPath);
-} else {
+} else if (printForSwift) {
+  // Swift の devSkywayToken に貼り付けやすい形式で stdout に出力
   console.log(token);
+} else {
+  // デフォルト: token を stdout に出さない（secret 漏洩防止）
+  console.error("[generate-skyway-token] token generated (use --print-token-for-swift to print)");
 }
 
 if (showPayload) {

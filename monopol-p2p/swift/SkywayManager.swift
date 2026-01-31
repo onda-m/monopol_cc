@@ -24,10 +24,8 @@ protocol SkywaySessionDelegate: AnyObject {
 
 class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublicationDelegate, RoomSubscriptionDelegate {
 
-    // 開発用フォールバックJWT（SkyWay Console で取得）
-    // Documents/skyway_token.txt がある場合はそちらを優先する
-    private let devSkywayToken: String = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlMDVjNTNhZS0yOTM0LTQ1ZDUtODcwZS0yMjZiNDJmMTQ3NzAiLCJpYXQiOjE3Njk3OTI1MzUsImV4cCI6MjA4NTE1MjUzNSwic2NvcGUiOnsiYXBwIjp7ImlkIjoiYTQxMDAxNDMtYTA1Mi00NDQzLTllMTAtNWFjY2E1ZDhhMmYyIiwidHVybiI6dHJ1ZSwiYWN0aW9ucyI6WyJyZWFkIiwid3JpdGUiXX0sInJvb21zIjp7Im5hbWUiOiIqIiwiYWN0aW9ucyI6WyJyZWFkIiwid3JpdGUiXSwibWVtYmVycyI6W3siaWQiOiIqIiwibmFtZSI6IioiLCJhY3Rpb25zIjpbIndyaXRlIl0sInB1YmxpY2F0aW9uIjp7ImFjdGlvbnMiOlsid3JpdGUiXX0sInN1YnNjcmlwdGlvbiI6eyJhY3Rpb25zIjpbIndyaXRlIl19fV19fX0.J6YGPkUQFV2xhS4Bs5PifrxIUSNxhptoeazssVcKKas"
-    private static let tokenFileName = "skyway_token.txt"
+    // 開発用JWT（generate-skyway-token.js で生成して貼り付ける）
+    private let devSkywayToken: String = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNmRhZWE3Zi1jMGVmLTRmY2ItYmU3Ni1mZTQ3MmViZDg4MDgiLCJpYXQiOjE3Njk4NzU4NTIsImV4cCI6MTc2OTg4NjY1Miwic2NvcGUiOnsiYXBwIjp7ImlkIjoiYTQxMDAxNDMtYTA1Mi00NDQzLTllMTAtNWFjY2E1ZDhhMmYyIiwidHVybiI6dHJ1ZSwiYWN0aW9ucyI6WyJyZWFkIiwid3JpdGUiXX0sInJvb21zIjp7Im5hbWUiOiIqIiwiYWN0aW9ucyI6WyJyZWFkIiwid3JpdGUiXSwibWVtYmVycyI6W3siaWQiOiIqIiwibmFtZSI6IioiLCJhY3Rpb25zIjpbIndyaXRlIl0sInB1YmxpY2F0aW9uIjp7ImFjdGlvbnMiOlsid3JpdGUiXX0sInN1YnNjcmlwdGlvbiI6eyJhY3Rpb25zIjpbIndyaXRlIl19fV19fX0.m6FTBEJIUyvl7etV9RJS0WjJPb3ugLvq9g9tpAM9PTQ"
 
     private var room: Room?
     private var localMember: LocalRoomMember?
@@ -89,7 +87,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             return
         }
         print("[SkyMgr] Context setup start (reset)")
-        let token = loadTokenFromFile() ?? devSkywayToken
+        let token = devSkywayToken
+        print("[SkyMgr] token source: embedded")
         logTokenExpiry(jwt: token)
         // Dispose stale context if it exists (e.g., previous dispose failed)
         if Context.isSetup {
@@ -100,28 +99,6 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         print("[SkyMgr] Context setup completed")
     }
 
-    /// Documents/skyway_token.txt からトークンを読む。無ければ nil。
-    private func loadTokenFromFile() -> String? {
-        guard let docs = FileManager.default.urls(
-            for: .documentDirectory, in: .userDomainMask
-        ).first else {
-            print("[SkyMgr] token source: embedded (Documents dir unavailable)")
-            return nil
-        }
-        let url = docs.appendingPathComponent(Self.tokenFileName)
-        guard let raw = try? String(contentsOf: url, encoding: .utf8) else {
-            print("[SkyMgr] token source: embedded (file not found)")
-            return nil
-        }
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            print("[SkyMgr] token source: embedded (file empty)")
-            return nil
-        }
-        print("[SkyMgr] token source: file (\(Self.tokenFileName))")
-        return trimmed
-    }
-
     /// JSON の数値を Int? に安全変換する（NSNumber / Double / String 対応）
     private func safeInt(from value: Any?) -> Int? {
         if let n = value as? NSNumber { return n.intValue }
@@ -130,6 +107,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     /// JWT の exp / iat / jti を安全にログ出力する（トークン全文は出さない）
+    /// json は Optional として扱い、Optional chaining でアクセスする（コンパイルエラー回避）
     private func logTokenExpiry(jwt token: String) {
         let parts = token.split(separator: ".")
         guard parts.count >= 2 else {
@@ -140,16 +118,16 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             .replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
         while base64.count % 4 != 0 { base64.append("=") }
-        guard let data = Data(base64Encoded: base64),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            print("[SkyMgr] token check: failed to decode payload")
+        guard let data = Data(base64Encoded: base64) else {
+            print("[SkyMgr] token check: failed to decode base64")
             return
         }
-        let exp = safeInt(from: json["exp"]) ?? 0
-        let iat = safeInt(from: json["iat"]) ?? 0
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let exp = safeInt(from: json?["exp"]) ?? 0
+        let iat = safeInt(from: json?["iat"]) ?? 0
         let now = Int(Date().timeIntervalSince1970)
         let ttl = exp - iat
-        let jtiRaw = (json["jti"] as? String) ?? "unknown"
+        let jtiRaw = json?["jti"] as? String ?? "unknown"
         let jtiPrefix = String(jtiRaw.prefix(8))
         print("[SkyMgr] token check: exp=\(exp), iat=\(iat), ttl=\(ttl)s, now-iat=\(now - iat)s, jti=\(jtiPrefix)...")
     }
