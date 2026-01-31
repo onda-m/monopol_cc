@@ -146,7 +146,7 @@ extension WaitViewController{
         // 新 SDK 後始末（room/member が nil でも安全、idempotent）
         // leaveRoomIfNeeded() 内で detachRoomCallbacks() も実行される
         Task { @MainActor in
-            await SkywayManager.sharedManager().leaveRoomIfNeeded()
+            await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "WaitVC.sessionClose")
         }
     }
     

@@ -64,6 +64,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     // MARK: Session
     func sessionStart(delegate: SkywaySessionDelegate) {
+        logState("sessionStart.begin")
         print("[SkyMgr] sessionStart called")
         sessionDelegate = delegate
         Task { @MainActor in
@@ -97,6 +98,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         try await Context.setup(withToken: token, options: nil)
         contextSetupDone = true
         print("[SkyMgr] Context setup completed")
+        logState("contextSetup.completed")
     }
 
     /// JSON の数値を Int? に安全変換する（NSNumber / Double / String 対応）
@@ -132,6 +134,35 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         print("[SkyMgr] token check: exp=\(exp), iat=\(iat), ttl=\(ttl)s, now-iat=\(now - iat)s, jti=\(jtiPrefix)...")
     }
 
+    /// デバッグ用: 改行をエスケープして1行にする
+    @inline(__always)
+    private func oneLine(_ s: String) -> String {
+        s.replacingOccurrences(of: "\n", with: "\\n").replacingOccurrences(of: "\r", with: "\\r")
+    }
+
+    /// デバッグ用: callstack を短縮して1行にまとめる
+    private let enableCallstackLog = true
+
+    private func shortCallstack(_ maxLines: Int = 5) -> String {
+        guard enableCallstackLog else { return "cs=disabled" }
+        let syms = Thread.callStackSymbols.dropFirst(2).prefix(maxLines)
+        let cleaned = syms.map { line -> String in
+            let parts = line.components(separatedBy: " ")
+            return parts.suffix(4).joined(separator: " ")
+        }
+        return "cs=" + cleaned.map(oneLine).joined(separator: " | ")
+    }
+
+    /// デバッグ用: 主要フラグの一括ログ出力
+    private func logState(_ label: String, reason: String? = nil, includeCallstack: Bool = false) {
+        let roomStr = (room != nil) ? "yes" : "nil"
+        let memberStr = (localMember != nil) ? "yes" : "nil"
+        let reasonStr = reason.map { " reason=\(oneLine($0))" } ?? ""
+        let state = "isConnectStarted=\(isConnectStarted) delegatesAttached=\(delegatesAttached) roomClosed=\(roomClosed) contextSetupDone=\(contextSetupDone) room=\(roomStr) localMember=\(memberStr)"
+        let cs = includeCallstack ? " \(shortCallstack(5))" : ""
+        print("[SkyMgr] STATE[\(oneLine(label))]\(reasonStr) \(state)\(cs)")
+    }
+
     func getPeerId() -> String {
         return peerId
     }
@@ -150,6 +181,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     ///   - roomName: 参加するルーム名（キャスト�E場合�E自刁E�E peerId、ユーザーの場合�Eキャスト�E peerId�E�E
     ///   - delegate: コールバック受信用チE��ゲーチE
     public func connectStart(roomName: String, delegate: SkywaySessionDelegate) {
+        logState("connectStart.begin")
         print("[SkyMgr] connectStart called, roomName=\(roomName), myPeerId=\(peerId)")
 
         // 多重開始ガーチE 既に接続中の場合�EスキチE�E
@@ -161,10 +193,11 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         isConnectStarted = true
         sessionDelegate = delegate
         roomClosed = false
+        print("[SkyMgr] roomClosed set to false reason=connectStart")
         subscribedPublicationIds.removeAll()  // リセチE��
         roomTask?.cancel()
         roomTask = Task { @MainActor in
-            await leaveRoomIfNeeded()
+            await leaveRoomIfNeeded(reason: "connectStart cleanup")
             guard !Task.isCancelled else {
                 print("[SkyMgr] connectStart Task cancelled before join")
                 isConnectStarted = false
@@ -175,15 +208,17 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     public func closeMedia(localView: UIView, remoteView: UIView) {
+        logState("closeMedia.begin")
         localContainerView = localView
         remoteContainerView = remoteView
         isConnectStarted = false
         roomClosed = true
+        print("[SkyMgr] roomClosed set to true reason=closeMedia")
         contextSetupDone = false  // Synchronous reset (async detachRoomCallbacks also resets)
         roomTask?.cancel()
         roomTask = nil
         Task { @MainActor in
-            await cleanupRoomResources()
+            await cleanupRoomResources(reason: "closeMedia")
         }
         localDataStream = nil
         localAudioStream = nil
@@ -202,7 +237,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     public func sessionClose() {
         Task { @MainActor in
-            await leaveRoomIfNeeded()
+            await leaveRoomIfNeeded(reason: "sessionClose")
         }
     }
 
@@ -229,7 +264,9 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     @MainActor
     private func joinRoomIfNeeded(roomName: String, memberName: String) async {
+        logState("joinRoomIfNeeded.begin")
         guard roomClosed == false else {
+            logState("joinRoomIfNeeded.skip", reason: "roomClosed=true")
             print("[SkyMgr] joinRoomIfNeeded skipped: roomClosed=true")
             return
         }
@@ -303,8 +340,9 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     @MainActor
-    func detachRoomCallbacks() async {
-        print("[SkyMgr] detachRoomCallbacks start")
+    func detachRoomCallbacks(reason: String) async {
+        logState("detach.start", reason: reason, includeCallstack: true)
+        print("[SkyMgr] detachRoomCallbacks start reason=\(oneLine(reason))")
 
         // (a) Nil subscription delegates
         for (_, subscription) in roomSubscriptions {
@@ -372,7 +410,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         // (k) Reset Context flag so next sessionStart re-runs Context.setup
         contextSetupDone = false
         print("[SkyMgr] Context reset on disconnect")
-        print("[SkyMgr] detachRoomCallbacks complete, delegatesAttached=false, isConnectStarted=false, subscribedPublicationIds cleared")
+        logState("detach.after", reason: reason)
+        print("[SkyMgr] detachRoomCallbacks complete reason=\(oneLine(reason))")
     }
 
     private func localMemberIdentifier(_ member: LocalRoomMember) -> String {
@@ -494,14 +533,17 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     @MainActor
-    func leaveRoomIfNeeded() async {
-        await detachRoomCallbacks()
+    func leaveRoomIfNeeded(reason: String) async {
+        print("[SkyMgr] leaveRoomIfNeeded start reason=\(reason)")
+        logState("leaveRoomIfNeeded.begin")
+        await detachRoomCallbacks(reason: reason)
         roomClosed = true
+        print("[SkyMgr] roomClosed set to true reason=\(reason)")
     }
 
     @MainActor
-    private func cleanupRoomResources() async {
-        await detachRoomCallbacks()
+    private func cleanupRoomResources(reason: String) async {
+        await detachRoomCallbacks(reason: reason)
     }
 
     private func attachLocalVideo() {
@@ -568,7 +610,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         Task { @MainActor in
             guard self.delegatesAttached else { return }
             print("[SkyMgr] roomDidClose")
-            await self.detachRoomCallbacks()  // isConnectStarted = false はここで設定される
+            await self.detachRoomCallbacks(reason: "roomDidClose")  // isConnectStarted = false はここで設定される
             self.sessionDelegate?.connectEnd()
         }
     }
@@ -597,7 +639,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
                 // 1対1通話なので相手が退出したら終亁E��ぁE
                 self.sessionDelegate?.connectDisconnect()
                 // ルームから退出してリソースをクリーンアチE�E
-                await self.leaveRoomIfNeeded()  // isConnectStarted = false はここで設定される
+                await self.leaveRoomIfNeeded(reason: "memberDidLeave")  // isConnectStarted = false はここで設定される
             }
         }
     }
