@@ -24,9 +24,10 @@ protocol SkywaySessionDelegate: AnyObject {
 
 class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublicationDelegate, RoomSubscriptionDelegate {
 
-    // 開発用固定JWT（SkyWay Console で取得）
-    // TODO: 本番では動的にトークンを取得する仕組みに置き換える
+    // 開発用フォールバックJWT（SkyWay Console で取得）
+    // Documents/skyway_token.txt がある場合はそちらを優先する
     private let devSkywayToken: String = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlMDVjNTNhZS0yOTM0LTQ1ZDUtODcwZS0yMjZiNDJmMTQ3NzAiLCJpYXQiOjE3Njk3OTI1MzUsImV4cCI6MjA4NTE1MjUzNSwic2NvcGUiOnsiYXBwIjp7ImlkIjoiYTQxMDAxNDMtYTA1Mi00NDQzLTllMTAtNWFjY2E1ZDhhMmYyIiwidHVybiI6dHJ1ZSwiYWN0aW9ucyI6WyJyZWFkIiwid3JpdGUiXX0sInJvb21zIjp7Im5hbWUiOiIqIiwiYWN0aW9ucyI6WyJyZWFkIiwid3JpdGUiXSwibWVtYmVycyI6W3siaWQiOiIqIiwibmFtZSI6IioiLCJhY3Rpb25zIjpbIndyaXRlIl0sInB1YmxpY2F0aW9uIjp7ImFjdGlvbnMiOlsid3JpdGUiXX0sInN1YnNjcmlwdGlvbiI6eyJhY3Rpb25zIjpbIndyaXRlIl19fV19fX0.J6YGPkUQFV2xhS4Bs5PifrxIUSNxhptoeazssVcKKas"
+    private static let tokenFileName = "skyway_token.txt"
 
     private var room: Room?
     private var localMember: LocalRoomMember?
@@ -88,19 +89,49 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             return
         }
         print("[SkyMgr] Context setup start (reset)")
-        logTokenExpiry()
+        let token = loadTokenFromFile() ?? devSkywayToken
+        logTokenExpiry(jwt: token)
         // Dispose stale context if it exists (e.g., previous dispose failed)
         if Context.isSetup {
             try? await Context.dispose()
         }
-        try await Context.setup(withToken: devSkywayToken, options: nil)
+        try await Context.setup(withToken: token, options: nil)
         contextSetupDone = true
         print("[SkyMgr] Context setup completed")
     }
 
-    /// JWT の exp / iat を安全にログ出力する（トークン全文は出さない）
-    private func logTokenExpiry() {
-        let parts = devSkywayToken.split(separator: ".")
+    /// Documents/skyway_token.txt からトークンを読む。無ければ nil。
+    private func loadTokenFromFile() -> String? {
+        guard let docs = FileManager.default.urls(
+            for: .documentDirectory, in: .userDomainMask
+        ).first else {
+            print("[SkyMgr] token source: embedded (Documents dir unavailable)")
+            return nil
+        }
+        let url = docs.appendingPathComponent(Self.tokenFileName)
+        guard let raw = try? String(contentsOf: url, encoding: .utf8) else {
+            print("[SkyMgr] token source: embedded (file not found)")
+            return nil
+        }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            print("[SkyMgr] token source: embedded (file empty)")
+            return nil
+        }
+        print("[SkyMgr] token source: file (\(Self.tokenFileName))")
+        return trimmed
+    }
+
+    /// JSON の数値を Int? に安全変換する（NSNumber / Double / String 対応）
+    private func safeInt(from value: Any?) -> Int? {
+        if let n = value as? NSNumber { return n.intValue }
+        if let s = value as? String   { return Int(s) }
+        return nil
+    }
+
+    /// JWT の exp / iat / jti を安全にログ出力する（トークン全文は出さない）
+    private func logTokenExpiry(jwt token: String) {
+        let parts = token.split(separator: ".")
         guard parts.count >= 2 else {
             print("[SkyMgr] token check: invalid JWT format")
             return
@@ -114,10 +145,13 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             print("[SkyMgr] token check: failed to decode payload")
             return
         }
-        //let exp = json["exp"] as? Int ?? 0
-        //let iat = json["iat"] as? Int ?? 0
-        //let now = Int(Date().timeIntervalSince1970)
-        //print("[SkyMgr] token check: iat=\(iat), exp=\(exp), now=\(now), remaining=\(exp - now)s")
+        let exp = safeInt(from: json["exp"]) ?? 0
+        let iat = safeInt(from: json["iat"]) ?? 0
+        let now = Int(Date().timeIntervalSince1970)
+        let ttl = exp - iat
+        let jtiRaw = (json["jti"] as? String) ?? "unknown"
+        let jtiPrefix = String(jtiRaw.prefix(8))
+        print("[SkyMgr] token check: exp=\(exp), iat=\(iat), ttl=\(ttl)s, now-iat=\(now - iat)s, jti=\(jtiPrefix)...")
     }
 
     func getPeerId() -> String {

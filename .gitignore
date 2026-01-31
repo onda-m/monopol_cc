@@ -62,7 +62,13 @@ Secrets.xcconfig
 *secrets*
 *secret*
 *token*
+!**/generate-skyway-token.js
 *apikey*
+
+# SkyWay トークンファイル（生成物）
+skyway_token.txt
+skyway_token*.txt
+token_*.txt
 *.p12
 *.mobileprovision
 
@@ -85,3 +91,7 @@ Secrets.xcconfig
 SkyWay.framework/
 **/SkyWay.framework/
 
+# Claude Code artifacts
+.claude/
+claude_step*_*.md
+nul
