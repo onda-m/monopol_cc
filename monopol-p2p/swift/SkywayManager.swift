@@ -24,9 +24,6 @@ protocol SkywaySessionDelegate: AnyObject {
 
 class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublicationDelegate, RoomSubscriptionDelegate {
 
-    // 開発用JWT（generate-skyway-token.js で生成して貼り付ける）
-    private let devSkywayToken: String = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNmRhZWE3Zi1jMGVmLTRmY2ItYmU3Ni1mZTQ3MmViZDg4MDgiLCJpYXQiOjE3Njk4NzU4NTIsImV4cCI6MTc2OTg4NjY1Miwic2NvcGUiOnsiYXBwIjp7ImlkIjoiYTQxMDAxNDMtYTA1Mi00NDQzLTllMTAtNWFjY2E1ZDhhMmYyIiwidHVybiI6dHJ1ZSwiYWN0aW9ucyI6WyJyZWFkIiwid3JpdGUiXX0sInJvb21zIjp7Im5hbWUiOiIqIiwiYWN0aW9ucyI6WyJyZWFkIiwid3JpdGUiXSwibWVtYmVycyI6W3siaWQiOiIqIiwibmFtZSI6IioiLCJhY3Rpb25zIjpbIndyaXRlIl0sInB1YmxpY2F0aW9uIjp7ImFjdGlvbnMiOlsid3JpdGUiXX0sInN1YnNjcmlwdGlvbiI6eyJhY3Rpb25zIjpbIndyaXRlIl19fV19fX0.m6FTBEJIUyvl7etV9RJS0WjJPb3ugLvq9g9tpAM9PTQ"
-
     private var room: Room?
     private var localMember: LocalRoomMember?
     private var roomPublications: [String: RoomPublication] = [:]
@@ -54,6 +51,10 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     private weak var sessionDelegate: SkywaySessionDelegate?
     private var subscribedPublicationIds: Set<String> = []
     //private var roomType: RoomType = .P2P
+
+    private let backendBaseURL: String = "https://test.monopol.jp"
+
+    private var tokenRoomNameForContextSetup: String = "default"
 
     class func sharedManager() -> SkywayManager {
         if (instance == nil) {
@@ -88,8 +89,11 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             return
         }
         print("[SkyMgr] Context setup start (reset)")
-        let token = devSkywayToken
-        print("[SkyMgr] token source: embedded")
+        let token = try await fetchSkywayTokenFromServer(
+            roomName: tokenRoomNameForContextSetup,
+            userId: peerId.isEmpty ? "anonymous" : peerId
+        )
+        print("[SkyMgr] token source: cloudflare (\(backendBaseURL)/skyway/token)")
         logTokenExpiry(jwt: token)
         // Dispose stale context if it exists (e.g., previous dispose failed)
         if Context.isSetup {
@@ -99,6 +103,40 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         contextSetupDone = true
         print("[SkyMgr] Context setup completed")
         logState("contextSetup.completed")
+    }
+
+    /// サーバーからSkyWay JWTを取得する
+    /// - Parameters:
+    ///   - roomName: 参加予定のルーム名
+    ///   - userId: ユーザー識別子
+    /// - Returns: JWT文字列
+    private func fetchSkywayTokenFromServer(roomName: String, userId: String) async throws -> String {
+        let url = URL(string: backendBaseURL)!.appendingPathComponent("skyway/token")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: String] = ["roomName": roomName, "userId": userId]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NSError(domain: "SkyMgr", code: -1,
+                          userInfo: [NSLocalizedDescriptionKey: "Invalid response type"])
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let raw = String(data: data, encoding: .utf8) ?? "n/a"
+            let bodyStr = String(raw.prefix(200))
+            print("[SkyMgr] fetchToken failed: status=\(httpResponse.statusCode) body=\(bodyStr)")
+            throw NSError(domain: "SkyMgr", code: httpResponse.statusCode,
+                          userInfo: [NSLocalizedDescriptionKey: "Server returned \(httpResponse.statusCode)"])
+        }
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let token = json["token"] as? String else {
+            throw NSError(domain: "SkyMgr", code: -2,
+                          userInfo: [NSLocalizedDescriptionKey: "Invalid token response format"])
+        }
+        return token
     }
 
     /// JSON の数値を Int? に安全変換する（NSNumber / Double / String 対応）
@@ -272,6 +310,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         }
         do {
             print("[SkyMgr] joinRoomIfNeeded start, roomName=\(roomName), memberName=\(memberName)")
+            tokenRoomNameForContextSetup = roomName
             try await setupContextIfNeeded()
             let roomOptions = Room.InitOptions()
             roomOptions.name = roomName
