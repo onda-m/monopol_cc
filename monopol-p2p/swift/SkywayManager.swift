@@ -162,12 +162,15 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             print("[SkyMgr] token check: failed to decode base64")
             return
         }
-        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        let exp = safeInt(from: json?["exp"]) ?? 0
-        let iat = safeInt(from: json?["iat"]) ?? 0
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            print("[SkyMgr] token check: failed to parse JSON payload")
+            return
+        }
+        let exp = safeInt(from: json["exp"]) ?? 0
+        let iat = safeInt(from: json["iat"]) ?? 0
         let now = Int(Date().timeIntervalSince1970)
         let ttl = exp - iat
-        let jtiRaw = json?["jti"] as? String ?? "unknown"
+        let jtiRaw = json["jti"] as? String ?? "unknown"
         let jtiPrefix = String(jtiRaw.prefix(8))
         print("[SkyMgr] token check: exp=\(exp), iat=\(iat), ttl=\(ttl)s, now-iat=\(now - iat)s, jti=\(jtiPrefix)...")
     }
@@ -214,15 +217,15 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         }
     }
 
-    /// ルームに参加し、ローカルストリームめEpublish する
+    /// ルームに参加し、ローカルストリームを publish する
     /// - Parameters:
-    ///   - roomName: 参加するルーム名（キャスト�E場合�E自刁E�E peerId、ユーザーの場合�Eキャスト�E peerId�E�E
-    ///   - delegate: コールバック受信用チE��ゲーチE
+    ///   - roomName: 参加するルーム名（キャストの場合は自分の peerId、ユーザーの場合はキャストの peerId）
+    ///   - delegate: コールバック受信用デリゲート
     public func connectStart(roomName: String, delegate: SkywaySessionDelegate) {
         logState("connectStart.begin")
         print("[SkyMgr] connectStart called, roomName=\(roomName), myPeerId=\(peerId)")
 
-        // 多重開始ガーチE 既に接続中の場合�EスキチE�E
+        // 多重開始ガード: 既に接続中の場合はスキップ
         if isConnectStarted && room != nil {
             print("[SkyMgr] connectStart skipped: already connected (isConnectStarted=true, room exists)")
             return
@@ -232,10 +235,10 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         sessionDelegate = delegate
         roomClosed = false
         print("[SkyMgr] roomClosed set to false reason=connectStart")
-        subscribedPublicationIds.removeAll()  // リセチE��
+        subscribedPublicationIds.removeAll()  // リセット
         roomTask?.cancel()
         roomTask = Task { @MainActor in
-            await leaveRoomIfNeeded(reason: "connectStart cleanup")
+            await leaveRoomIfNeeded(reason: "connectStart cleanup", setRoomClosed: false)
             guard !Task.isCancelled else {
                 print("[SkyMgr] connectStart Task cancelled before join")
                 isConnectStarted = false
@@ -400,7 +403,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
                 try? await localMember.unsubscribe(subscriptionId: subscriptionId)
             }
         }
-        roomSubscriptions.removeAll()  // 忁E��E 二重処琁E��止
+        roomSubscriptions.removeAll()  // 念のため二重処理防止
         print("[SkyMgr] roomSubscriptions cleared")
 
         // (d) Unpublish all
@@ -410,7 +413,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
                 try? await localMember.unpublish(publicationId: publicationId)
             }
         }
-        roomPublications.removeAll()  // 忁E��E 二重処琁E��止
+        roomPublications.removeAll()  // 念のため二重処理防止
         print("[SkyMgr] roomPublications cleared")
 
         // (e) Nil localMember delegate
@@ -432,7 +435,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         remoteDataStream = nil
         print("[SkyMgr] remote streams cleared")
 
-        // (i) Detach local views first, then clear local streams (再接続時は prepareLocalStreamsIfNeeded で再生戁E
+        // (i) Detach local views first, then clear local streams (再接続時は prepareLocalStreamsIfNeeded で再生成)
         detachLocalVideo()
         localVideoStream = nil
         localAudioStream = nil
@@ -671,13 +674,13 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     func room(_ room: Room, memberDidLeave member: RoomMember) {
         Task { @MainActor in
             guard self.delegatesAttached else { return }
-            guard !self.roomClosed else { return }  // 既に閉じてぁE��場合�EスキチE�E
+            guard !self.roomClosed else { return }  // 既に閉じている場合はスキップ
             guard let localMember = self.localMember else { return }
             if self.memberIdentifier(member) != self.localMemberIdentifier(localMember) {
                 print("[SkyMgr] memberDidLeave: remote member left, memberId=\(member.id)")
-                // 1対1通話なので相手が退出したら終亁E��ぁE
+                // 1対1通話なので相手が退出したら終了扱い
                 self.sessionDelegate?.connectDisconnect()
-                // ルームから退出してリソースをクリーンアチE�E
+                // ルームから退出してリソースをクリーンアップ
                 await self.leaveRoomIfNeeded(reason: "memberDidLeave")  // isConnectStarted = false はここで設定される
             }
         }
