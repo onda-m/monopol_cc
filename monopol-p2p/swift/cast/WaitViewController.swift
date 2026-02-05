@@ -156,6 +156,100 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     // Note: extension (別ファイル) からアクセスするため internal スコープ
     var isLiveConnectionStarted = false
 
+    // 新SDK: UI状態管理
+    enum WaitState {
+        case idle       // 何もしていない
+        case starting   // 待機開始準備中（sessionStart中）
+        case waiting    // 待機中（join/publish完了、ユーザー参加待ち）
+        case connected  // 配信中（相手が参加）
+        case stopping   // 解除中
+    }
+    private(set) var waitState: WaitState = .idle
+
+    @MainActor
+    func setWaitState(_ newState: WaitState) {
+        guard waitState != newState else { return }
+        #if DEBUG
+        let caller = Thread.callStackSymbols.prefix(5).joined(separator: "\n  ")
+        print("[NewSDK] WaitState: \(waitState) -> \(newState)\n  \(caller)")
+        #else
+        print("[NewSDK] WaitState: \(waitState) -> \(newState)")
+        #endif
+        waitState = newState
+        updateUI(for: newState)
+    }
+
+    @MainActor
+    private func updateUI(for state: WaitState) {
+        #if DEBUG
+        let caller = Thread.callStackSymbols.prefix(5).joined(separator: "\n  ")
+        print("[NewSDK][UI] updateUI state=\(state)\n  \(caller)")
+        #else
+        print("[NewSDK][UI] updateUI state=\(state)")
+        #endif
+
+        switch state {
+        case .idle:
+            // 初期状態: 待機UI表示可、配信UI非表示
+            countDownLabel?.isHidden = true
+            userIconImageView?.isHidden = true
+            endCallButton?.isHidden = true
+            oshiraseView?.isHidden = true
+            starGetView?.isHidden = true
+            castWaitDialog.waitDialogView.isHidden = false
+            castWaitDialog.statusLbl.isHidden = false
+
+        case .waiting:
+            // 待機中: 待機UI表示、配信UI非表示
+            countDownLabel?.isHidden = true
+            userIconImageView?.isHidden = true
+            endCallButton?.isHidden = true
+            oshiraseView?.isHidden = true
+            starGetView?.isHidden = true
+            castWaitDialog.waitDialogView.isHidden = false
+            castWaitDialog.statusLbl.isHidden = false
+            castWaitDialog.allCoverMessage.isHidden = true
+            castWaitDialog.allCoverRequest.isHidden = true
+            castWaitDialog.topInfoLabel.isHidden = true
+
+        case .connected:
+            // 配信中: 配信UI表示、待機UI非表示
+            countDownLabel?.isHidden = false
+            userIconImageView?.isHidden = false
+            endCallButton?.isHidden = false
+            endCallButton?.isEnabled = true
+            oshiraseView?.isHidden = true  // 必要時のみ表示
+            starGetView?.isHidden = true   // 必要時のみ表示
+            castWaitDialog.waitDialogView.isHidden = true
+            castWaitDialog.statusLbl.isHidden = true
+            castWaitDialog.allCoverMessage.isHidden = true
+            castWaitDialog.allCoverRequest.isHidden = true
+            castWaitDialog.topInfoLabel.isHidden = true
+
+        case .starting:
+            // 待機開始準備中: 配信UI非表示 + 操作無効化
+            countDownLabel?.isHidden = true
+            userIconImageView?.isHidden = true
+            endCallButton?.isHidden = true
+            endCallButton?.isEnabled = false
+            oshiraseView?.isHidden = true
+            starGetView?.isHidden = true
+            castWaitDialog.waitDialogView.isHidden = false
+            castWaitDialog.statusLbl.isHidden = false
+
+        case .stopping:
+            // 解除中: 配信UI非表示 + 操作無効化
+            countDownLabel?.isHidden = true
+            userIconImageView?.isHidden = true
+            endCallButton?.isHidden = true
+            endCallButton?.isEnabled = false
+            oshiraseView?.isHidden = true
+            starGetView?.isHidden = true
+            castWaitDialog.waitDialogView.isHidden = false
+            castWaitDialog.statusLbl.isHidden = false
+        }
+    }
+
     /*
      *********相手の情報を格納(一部)*********
      *********全格納はOnLiveUserInfoへ*********
@@ -177,7 +271,12 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        
+
+        // 新SDK: UI状態を初期化（前画面からの戻り等で状態が残らないようにする）
+        Task { @MainActor in
+            self.setWaitState(.idle)
+        }
+
         let mainBoundSize: CGSize = UIScreen.main.bounds.size
         self.castSelectedDialog.frame = CGRect(x: 0, y: -50, width: mainBoundSize.width, height: mainBoundSize.height + 100)
         

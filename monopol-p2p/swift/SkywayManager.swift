@@ -488,21 +488,21 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     @MainActor
     private func publishLocalStreams(localMember: LocalRoomMember) async throws {
-        print("[SkyMgr] publishLocalStreams start")
+        print("[SkyMgr][publish] start")
         await prepareLocalStreamsIfNeeded()
         if let localAudioStream = localAudioStream {
             let pub = try await localMember.publish(localAudioStream, options: RoomPublicationOptions())
             pub.delegate = self
             roomPublications[pub.id] = pub
-            print("[SkyMgr] published audio, pubId=\(pub.id)")
+            print("[SkyMgr][publish] audio ok pubId=\(pub.id)")
         }
         if let localVideoStream = localVideoStream {
             let pub = try await localMember.publish(localVideoStream, options: RoomPublicationOptions())
             pub.delegate = self
             roomPublications[pub.id] = pub
-            print("[SkyMgr] published video, pubId=\(pub.id)")
+            print("[SkyMgr][publish] video ok pubId=\(pub.id)")
         }
-        print("[SkyMgr] publishLocalStreams complete, total publications=\(roomPublications.count)")
+        print("[SkyMgr][publish] complete total=\(roomPublications.count)")
         // Data stream deferred for MVP
     }
 
@@ -561,15 +561,15 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         subscribedPublicationIds.insert(pubId)
 
         do {
-            print("[SkyMgr] subscribeToPublication start, pubId=\(pubId), contentType=\(publication.contentType)")
+            print("[SkyMgr][subscribe] start pubId=\(pubId) contentType=\(publication.contentType)")
             let subscription = try await localMember.subscribe(publicationId: pubId, options: nil)
             subscription.delegate = self
             roomSubscriptions[subscription.id] = subscription
-            print("[SkyMgr] subscribeToPublication success, subId=\(subscription.id), pubId=\(pubId)")
+            print("[SkyMgr][subscribe] ok subId=\(subscription.id) pubId=\(pubId)")
             handleStreamAttachment(subscription: subscription)
         } catch {
             // Subscription may fail if publication was canceled
-            print("[SkyMgr] subscribeToPublication failed, pubId=\(pubId), error=\(error)")
+            print("[SkyMgr][subscribe] fail pubId=\(pubId) error=\(error)")
             subscribedPublicationIds.remove(pubId)
         }
     }
@@ -733,12 +733,16 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     func room(_ room: Room, didUnpublishStreamOf publication: RoomPublication) {
         Task { @MainActor in
             guard self.delegatesAttached else { return }
+            let pubId = publication.id
+            print("[SkyMgr] didUnpublishStreamOf pubId=\(pubId)")
             // Remote unpublished; subscription will be canceled automatically
-            // Clean up associated subscription if any
+            // Clean up associated subscription and subscribedPublicationIds
+            self.subscribedPublicationIds.remove(pubId)
             for (subId, sub) in self.roomSubscriptions {
-                if sub.publication?.id == publication.id {
+                if sub.publication?.id == pubId {
                     sub.delegate = nil
                     self.roomSubscriptions.removeValue(forKey: subId)
+                    print("[SkyMgr] didUnpublishStreamOf: removed subscription subId=\(subId)")
                     break
                 }
             }

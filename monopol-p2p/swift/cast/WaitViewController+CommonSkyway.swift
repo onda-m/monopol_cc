@@ -130,6 +130,10 @@ extension WaitViewController{
     }
     
     func sessionClose() {
+        // 解除中: 配信UIを非表示にし操作を無効化
+        Task { @MainActor in
+            self.setWaitState(.stopping)
+        }
         defer { isLiveConnectionStarted = false }
 
         // 旧 Peer SDK クリーンアップ（peer が存在する場合のみ）
@@ -898,6 +902,11 @@ extension WaitViewController {
 
     func startWaitingUsingNewSDK() {
         print("[NewSDK][MVP] startWaitingUsingNewSDK triggered")
+        // 待機開始準備中: 配信UIを非表示にし操作を無効化
+        // sessionStart → connectSucces() で .waiting になる
+        Task { @MainActor in
+            self.setWaitState(.stopping)
+        }
         print("[NewSDK][MVP] calling SkywayManager.setWaitLocal")
         SkywayManager.sharedManager().setWaitLocal(localView: self.localStreamView, delegate: self)
         print("[NewSDK][MVP] calling SkywayManager.setRemoteView")
@@ -937,6 +946,9 @@ extension WaitViewController: SkywaySessionDelegate {
     }
     func connectSucces() {
         print("[NewSDK] WaitViewController: connectSucces - 待機完了、ユーザー参加待ち")
+        Task { @MainActor in
+            self.setWaitState(.waiting)
+        }
     }
     func remoteConnectSucces() {
         print("[NewSDK] WaitViewController: remoteConnectSucces - ユーザーが参加しました")
@@ -949,6 +961,7 @@ extension WaitViewController: SkywaySessionDelegate {
         print("[NewSDK] WaitViewController: isLiveConnectionStarted = true")
         // ここで startConnection() 相当の処理を呼ぶ（UI更新など）
         Task { @MainActor in
+            self.setWaitState(.connected)
             self.startConnection()
         }
     }
@@ -959,6 +972,7 @@ extension WaitViewController: SkywaySessionDelegate {
         isLiveConnectionStarted = false
         print("[NewSDK] WaitViewController: connectDisconnect - isLiveConnectionStarted = false")
         Task { @MainActor in
+            self.setWaitState(.waiting)
             self.returnToWaitingUI()
         }
     }
@@ -977,6 +991,9 @@ extension WaitViewController: SkywaySessionDelegate {
     func connectEnd() {
         isLiveConnectionStarted = false
         print("[NewSDK] WaitViewController: connectEnd - ルームが閉じられました, isLiveConnectionStarted = false")
+        Task { @MainActor in
+            self.setWaitState(.idle)
+        }
     }
     func connectError() {
         print("[NewSDK] WaitViewController: connectError - 接続エラー")
