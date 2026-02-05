@@ -48,6 +48,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     private var roomClosed = false
     private var peerId: String = ""
     private var isConnectStarted: Bool = false
+    private var isLeaving: Bool = false
     private weak var sessionDelegate: SkywaySessionDelegate?
     private var subscribedPublicationIds: Set<String> = []
     //private var roomType: RoomType = .P2P
@@ -200,7 +201,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         let roomStr = (room != nil) ? "yes" : "nil"
         let memberStr = (localMember != nil) ? "yes" : "nil"
         let reasonStr = reason.map { " reason=\(oneLine($0))" } ?? ""
-        let state = "isConnectStarted=\(isConnectStarted) delegatesAttached=\(delegatesAttached) roomClosed=\(roomClosed) contextSetupDone=\(contextSetupDone) room=\(roomStr) localMember=\(memberStr)"
+        let state = "isConnectStarted=\(isConnectStarted) isLeaving=\(isLeaving) delegatesAttached=\(delegatesAttached) roomClosed=\(roomClosed) contextSetupDone=\(contextSetupDone) room=\(roomStr) localMember=\(memberStr)"
         let cs = includeCallstack ? " \(shortCallstack(5))" : ""
         print("[SkyMgr] STATE[\(oneLine(label))]\(reasonStr) \(state)\(cs)")
     }
@@ -225,6 +226,12 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     public func connectStart(roomName: String, delegate: SkywaySessionDelegate) {
         logState("connectStart.begin")
         print("[SkyMgr] connectStart called, roomName=\(roomName), myPeerId=\(peerId)")
+
+        // 離脱中ガード: leave 処理中は再待機を拒否
+        if isLeaving {
+            print("[SkyMgr] connectStart skipped: currently leaving (isLeaving=true)")
+            return
+        }
 
         // 多重開始ガード: 既に接続中の場合はスキップ
         if isConnectStarted && room != nil {
@@ -387,71 +394,81 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         logState("detach.start", reason: reason, includeCallstack: true)
         print("[SkyMgr] detachRoomCallbacks start reason=\(oneLine(reason))")
 
-        // (a) Nil subscription delegates
+        // (1) Unsubscribe all - await で完了を待つ
+        if let member = localMember {
+            for (subscriptionId, _) in roomSubscriptions {
+                print("[SkyMgr] unsubscribe.start subId=\(subscriptionId)")
+                do {
+                    try await member.unsubscribe(subscriptionId: subscriptionId)
+                    print("[SkyMgr] unsubscribe.ok subId=\(subscriptionId)")
+                } catch {
+                    print("[SkyMgr] unsubscribe.fail subId=\(subscriptionId) error=\(error)")
+                }
+            }
+        }
+
+        // (2) Unpublish all - await で完了を待つ
+        if let member = localMember {
+            for (publicationId, _) in roomPublications {
+                print("[SkyMgr] unpublish.start pubId=\(publicationId)")
+                do {
+                    try await member.unpublish(publicationId: publicationId)
+                    print("[SkyMgr] unpublish.ok pubId=\(publicationId)")
+                } catch {
+                    print("[SkyMgr] unpublish.fail pubId=\(publicationId) error=\(error)")
+                }
+            }
+        }
+
+        // (3) Leave room - 必ず await で完了を待つ
+        if let member = localMember {
+            let memberId = member.id
+            print("[SkyMgr] leave.start memberId=\(memberId)")
+            do {
+                try await member.leave()
+                print("[SkyMgr] leave.ok memberId=\(memberId)")
+            } catch {
+                print("[SkyMgr] leave.fail memberId=\(memberId) error=\(error)")
+            }
+        }
+
+        // (4) leave 完了後に delegate を nil にし、map をクリア
         for (_, subscription) in roomSubscriptions {
             subscription.delegate = nil
         }
+        roomSubscriptions.removeAll()
+        print("[SkyMgr] roomSubscriptions cleared")
 
-        // (b) Nil publication delegates
         for (_, publication) in roomPublications {
             publication.delegate = nil
         }
-
-        // (c) Unsubscribe all
-        if let localMember = localMember {
-            for (subscriptionId, _) in roomSubscriptions {
-                print("[SkyMgr] unsubscribe subId=\(subscriptionId)")
-                try? await localMember.unsubscribe(subscriptionId: subscriptionId)
-            }
-        }
-        roomSubscriptions.removeAll()  // 念のため二重処理防止
-        print("[SkyMgr] roomSubscriptions cleared")
-
-        // (d) Unpublish all
-        if let localMember = localMember {
-            for (publicationId, _) in roomPublications {
-                print("[SkyMgr] unpublish pubId=\(publicationId)")
-                try? await localMember.unpublish(publicationId: publicationId)
-            }
-        }
-        roomPublications.removeAll()  // 念のため二重処理防止
+        roomPublications.removeAll()
         print("[SkyMgr] roomPublications cleared")
 
-        // (e) Nil localMember delegate
         localMember?.delegate = nil
-
-        // (f) Leave room
-        if let localMember = localMember {
-            print("[SkyMgr] leaving room, memberId=\(localMember.id)")
-            try? await localMember.leave()
-        }
-
-        // (g) Nil room delegate
         room?.delegate = nil
 
-        // (h) Detach views first (while streams still exist), then clear streams
+        // (5) Detach views, clear streams
         detachRemoteVideo()
         remoteVideoStream = nil
         remoteAudioStream = nil
         remoteDataStream = nil
         print("[SkyMgr] remote streams cleared")
 
-        // (i) Detach local views first, then clear local streams (再接続時は prepareLocalStreamsIfNeeded で再生成)
         detachLocalVideo()
         localVideoStream = nil
         localAudioStream = nil
         localDataStream = nil
         print("[SkyMgr] local streams cleared")
 
-        // (j) Clear references and reset guards
+        // (6) Clear references and reset guards
         self.localMember = nil
         self.room = nil
         delegatesAttached = false
         isConnectStarted = false
         subscribedPublicationIds.removeAll()
-
-        // (k) Reset Context flag so next sessionStart re-runs Context.setup
         contextSetupDone = false
+
         print("[SkyMgr] Context reset on disconnect")
         logState("detach.after", reason: reason)
         print("[SkyMgr] detachRoomCallbacks complete reason=\(oneLine(reason))")
@@ -577,6 +594,14 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     @MainActor
     func leaveRoomIfNeeded(reason: String, setRoomClosed: Bool = true) async {
+        // 二重実行防止
+        guard !isLeaving else {
+            print("[SkyMgr] leaveRoomIfNeeded skipped: already leaving")
+            return
+        }
+        isLeaving = true
+        defer { isLeaving = false }
+
         print("[SkyMgr] leaveRoomIfNeeded start reason=\(reason)")
         logState("leaveRoomIfNeeded.begin")
         await detachRoomCallbacks(reason: reason)
@@ -584,6 +609,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             roomClosed = true
             print("[SkyMgr] roomClosed set to true reason=\(reason)")
         }
+        print("[SkyMgr] leaveRoomIfNeeded complete reason=\(reason)")
     }
 
     @MainActor
