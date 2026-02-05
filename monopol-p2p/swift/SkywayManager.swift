@@ -162,7 +162,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             print("[SkyMgr] token check: failed to decode base64")
             return
         }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        guard let obj = try? JSONSerialization.jsonObject(with: data),
+              let json = obj as? [String: Any] else {
             print("[SkyMgr] token check: failed to parse JSON payload")
             return
         }
@@ -575,12 +576,14 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     @MainActor
-    func leaveRoomIfNeeded(reason: String) async {
+    private func leaveRoomIfNeeded(reason: String, setRoomClosed: Bool = true) async {
         print("[SkyMgr] leaveRoomIfNeeded start reason=\(reason)")
         logState("leaveRoomIfNeeded.begin")
         await detachRoomCallbacks(reason: reason)
-        roomClosed = true
-        print("[SkyMgr] roomClosed set to true reason=\(reason)")
+        if setRoomClosed {
+            roomClosed = true
+            print("[SkyMgr] roomClosed set to true reason=\(reason)")
+        }
     }
 
     @MainActor
