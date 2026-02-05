@@ -576,7 +576,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     @MainActor
-    fileprivate func leaveRoomIfNeeded(reason: String, setRoomClosed: Bool = true) async {
+    func leaveRoomIfNeeded(reason: String, setRoomClosed: Bool = true) async {
         print("[SkyMgr] leaveRoomIfNeeded start reason=\(reason)")
         logState("leaveRoomIfNeeded.begin")
         await detachRoomCallbacks(reason: reason)
