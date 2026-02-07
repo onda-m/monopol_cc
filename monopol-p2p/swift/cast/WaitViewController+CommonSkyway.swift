@@ -130,6 +130,13 @@ extension WaitViewController{
     }
     
     func sessionClose() {
+        // 再入防止ガード
+        guard !isSessionClosing else {
+            print("[NewSDK] sessionClose: already closing, skipping")
+            return
+        }
+        isSessionClosing = true
+
         // 解除中: 配信UIを非表示にし操作を無効化
         Task { @MainActor in
             self.setWaitState(.stopping)
@@ -148,10 +155,43 @@ extension WaitViewController{
         }
 
         // 新 SDK 後始末（room/member が nil でも安全、idempotent）
-        // leaveRoomIfNeeded() 内で detachRoomCallbacks() も実行される
-        Task { @MainActor in
+        // leaveRoomIfNeeded() はバックグラウンドで実行し、完了時のみ MainActor で通知
+        Task {
             await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "WaitVC.sessionClose")
+            await MainActor.run {
+                self.onSessionCloseCompleted()
+            }
         }
+
+        // タイムアウト（12秒）: leave がハングした場合の強制復帰
+        sessionCloseTimeoutTask?.cancel()
+        sessionCloseTimeoutTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 12_000_000_000)
+            guard !Task.isCancelled else { return }
+            print("[NewSDK] sessionClose: TIMEOUT after 12s, forcing recovery")
+            self.onSessionCloseCompleted()
+        }
+    }
+
+    @MainActor
+    private func onSessionCloseCompleted() {
+        // 冪等: 1回のみ実行
+        guard isSessionClosing else { return }
+        isSessionClosing = false
+        sessionCloseCompletedOnce = true
+
+        // タイムアウトタスクをキャンセル
+        sessionCloseTimeoutTask?.cancel()
+        sessionCloseTimeoutTask = nil
+
+        print("[NewSDK] sessionClose completed, transitioning to .idle")
+        self.setWaitState(.idle)
+
+        // cancelWait ボタン経由の場合のみ画面遷移を実行
+        if isCancelWaitFlow {
+            self.castWaitDialog.cancelWaitCompleted()
+        }
+        isCancelWaitFlow = false
     }
     
     //type=0:初期化あり(最初一度だけ実行)
@@ -902,6 +942,12 @@ extension WaitViewController {
 
     func startWaitingUsingNewSDK() {
         print("[NewSDK][MVP] startWaitingUsingNewSDK triggered")
+        // 新しい待機サイクルのためフラグリセット
+        isSessionClosing = false
+        sessionCloseCompletedOnce = false
+        isCancelWaitFlow = false
+        sessionCloseTimeoutTask?.cancel()
+        sessionCloseTimeoutTask = nil
         // 待機開始準備中: 配信UIを非表示にし操作を無効化
         // sessionStart → connectSucces() で .waiting になる
         Task { @MainActor in
@@ -997,5 +1043,22 @@ extension WaitViewController: SkywaySessionDelegate {
     }
     func connectError() {
         print("[NewSDK] WaitViewController: connectError - 接続エラー")
+    }
+}
+
+// MARK: - CastWaitDialogDelegate
+extension WaitViewController: CastWaitDialogDelegate {
+    func castWaitDialogDidRequestCancelWait(_ dialog: CastWaitDialog) {
+        print("[NewSDK] castWaitDialogDidRequestCancelWait: beginning leave process")
+
+        // cancelWait ボタン経由であることを記録（完了時に画面遷移するため）
+        self.isCancelWaitFlow = true
+
+        Task { @MainActor in
+            self.setWaitState(.stopping)
+        }
+
+        self.closeMedia()
+        self.sessionClose()
     }
 }

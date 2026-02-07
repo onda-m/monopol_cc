@@ -10,8 +10,15 @@ import Firebase
 import FirebaseDatabase
 //import UserNotifications
 
+protocol CastWaitDialogDelegate: AnyObject {
+    func castWaitDialogDidRequestCancelWait(_ dialog: CastWaitDialog)
+}
+
 class CastWaitDialog: UIView {
     let iconSize: CGFloat = 16.0
+
+    weak var cancelWaitDelegate: CastWaitDialogDelegate?
+    private var isCancellingWait = false
     
     let appDelegate = UIApplication.shared.delegate as! AppDelegate
     
@@ -566,23 +573,33 @@ class CastWaitDialog: UIView {
 
     //「待機状態をキャンセル」ボタンを押した時
     @IBAction func cancelWait(_ sender: Any) {
+        // 二重タップ防止
+        guard !isCancellingWait else {
+            print("[CastWaitDialog] cancelWait: already cancelling, ignoring tap")
+            return
+        }
+        isCancellingWait = true
+
+        // 即時UIロック
+        cancelWaitBtn.isEnabled = false
+        cancelWaitBtn.alpha = 0.5
+        statusLbl.text = "解除中..."
+
         //20200606追加
         //申請直後リスナーが落ちたときのストリーマーがロックされてしまう問題
         UtilFunc.deleteCastLock(cast_id:self.user_id, user_id:0, type:2)
-        
+
         //待機解除時のタイムスタンプ
         //1:待機スタート 2:ライブ開始 3:ライブ後の待機 4：待機解除 5:運営タイムスタンプ（待機確認）
         UtilFunc.addActionRireki(user_id: self.user_id, listener_id: 0, type: 4, value01:0, value02:0)
-        
+
         //ログオフ状態に変更
         var stringUrl = Util.URL_MOD_STATUS
         stringUrl.append("?user_id=")
         stringUrl.append(String(self.user_id))
         stringUrl.append("&status=3")//キャスト-ログオフ状態
-        
-        // Swift4からは書き方が変わりました。
+
         let url = URL(string: stringUrl.addingPercentEncoding(withAllowedCharacters: NSCharacterSet.urlQueryAllowed)!)!
-        //let decodedString:String = text.removingPercentEncoding!
         let req = URLRequest(url: url)
         let task = URLSession.shared.dataTask(with: req, completionHandler: {
             (data, res, err) in
@@ -592,10 +609,27 @@ class CastWaitDialog: UIView {
             }
         })
         task.resume()
-        
-        //リクエスト履歴の未読数を取得した後に画面遷移
-        //配信準備のトップ画面へ
-        self.getLiveRequestNoreadCount(type:1, user_id:self.user_id)
+
+        // delegate に解除処理を委譲（完了後に cancelWaitCompleted が呼ばれる）
+        if let delegate = cancelWaitDelegate {
+            delegate.castWaitDialogDidRequestCancelWait(self)
+        } else {
+            // fallback: delegate 未設定時は従来動作
+            print("[CastWaitDialog] cancelWait: no delegate, falling back to direct navigation")
+            self.getLiveRequestNoreadCount(type:1, user_id:self.user_id)
+        }
+    }
+
+    /// 解除処理完了後に delegate から呼ばれる。画面遷移を実行。
+    func cancelWaitCompleted() {
+        self.getLiveRequestNoreadCount(type: 1, user_id: self.user_id)
+    }
+
+    /// 解除状態をリセット（待機復帰時に呼ばれる）
+    func resetCancelState() {
+        isCancellingWait = false
+        cancelWaitBtn.isEnabled = true
+        cancelWaitBtn.alpha = 1.0
     }
     
     //下記はUtilFunc内と同じ関数

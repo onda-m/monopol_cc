@@ -156,6 +156,13 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     // Note: extension (別ファイル) からアクセスするため internal スコープ
     var isLiveConnectionStarted = false
 
+    // sessionClose 再入防止・完了管理フラグ
+    // Note: extension (別ファイル) からアクセスするため internal スコープ
+    var isCancelWaitFlow = false
+    var isSessionClosing = false
+    var sessionCloseCompletedOnce = false
+    var sessionCloseTimeoutTask: Task<Void, Never>?
+
     // 新SDK: UI状態管理
     enum WaitState {
         case idle       // 何もしていない
@@ -198,6 +205,8 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             starGetView?.isHidden = true
             castWaitDialog.waitDialogView.isHidden = false
             castWaitDialog.statusLbl.isHidden = false
+            castWaitDialog.cancelWaitBtn.isEnabled = true
+            castWaitDialog.cancelWaitBtn.alpha = 1.0
 
         case .waiting:
             // 待機中: 待機UI表示、配信UI非表示
@@ -211,6 +220,9 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             castWaitDialog.allCoverMessage.isHidden = true
             castWaitDialog.allCoverRequest.isHidden = true
             castWaitDialog.topInfoLabel.isHidden = true
+            castWaitDialog.cancelWaitBtn.isEnabled = true
+            castWaitDialog.cancelWaitBtn.alpha = 1.0
+            castWaitDialog.resetCancelState()
 
         case .connected:
             // 配信中: 配信UI表示、待機UI非表示
@@ -247,6 +259,10 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             starGetView?.isHidden = true
             castWaitDialog.waitDialogView.isHidden = false
             castWaitDialog.statusLbl.isHidden = false
+            // 解除ボタンも無効化
+            castWaitDialog.cancelWaitBtn.isEnabled = false
+            castWaitDialog.cancelWaitBtn.alpha = 0.5
+            castWaitDialog.statusLbl.text = "解除中..."
         }
     }
 
@@ -286,6 +302,9 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
         self.appDelegate.window?.addSubview(self.castSelectedDialog)
 
         self.exclusiveAllTouches() // これを呼ぶだけで同時タップが防げる
+
+        // 配信待機解除ボタンの delegate を設定
+        self.castWaitDialog.cancelWaitDelegate = self
         
         /*****************************************************/
         //リリース時には予約不可能とする(念のためここでDBの状態を変更)
@@ -1435,13 +1454,20 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     //バックグラウンドなどではなく、違う画面に遷移したときにだけ実行される。（1度のみ実行）
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+
+        // viewWillDisappear 経由では画面遷移を起こさない
+        isCancelWaitFlow = false
+
         //ライブ配信終了へ
         //正常状態(人的操作によるもの)にする
         self.listenerErrorFlg = 1
-        
-        self.closeMedia()
-        self.sessionClose()
-        
+
+        // sessionCloseCompletedOnce が true の場合は既に完了済みなのでスキップ
+        if !sessionCloseCompletedOnce {
+            self.closeMedia()
+            self.sessionClose()
+        }
+
         //リクエスト監視の解放（ここで解放しないと監視が徐々に増えていく？）
         self.castWaitConditionRef.removeObserver(withHandle: self.request_handler)
 
