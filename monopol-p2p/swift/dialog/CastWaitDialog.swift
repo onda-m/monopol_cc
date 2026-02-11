@@ -583,7 +583,7 @@ class CastWaitDialog: UIView {
         // 即時UIロック
         cancelWaitBtn.isEnabled = false
         cancelWaitBtn.alpha = 0.5
-        statusLbl.text = "解除中..."
+        statusLbl.text = "解除中"
 
         //20200606追加
         //申請直後リスナーが落ちたときのストリーマーがロックされてしまう問題

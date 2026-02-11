@@ -172,6 +172,8 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
         case stopping   // 解除中
     }
     private(set) var waitState: WaitState = .idle
+    /// stopping 状態中の遅延処理（asyncAfter 等）をキャンセルするための WorkItem
+    private var stoppingWorkItem: DispatchWorkItem?
 
     @MainActor
     func setWaitState(_ newState: WaitState) {
@@ -190,10 +192,16 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     private func updateUI(for state: WaitState) {
         #if DEBUG
         let caller = Thread.callStackSymbols.prefix(5).joined(separator: "\n  ")
-        print("[NewSDK][UI] updateUI state=\(state)\n  \(caller)")
+        print("[NewSDK][UI] updateUI state=\(state) statusLbl=\(Unmanaged.passUnretained(castWaitDialog.statusLbl).toOpaque())\n  \(caller)")
         #else
-        print("[NewSDK][UI] updateUI state=\(state)")
+        print("[NewSDK][UI] updateUI state=\(state) statusLbl=\(Unmanaged.passUnretained(castWaitDialog.statusLbl).toOpaque())")
         #endif
+
+        // stopping 以外への遷移時は stopping 用の遅延処理をキャンセル
+        if state != .stopping {
+            stoppingWorkItem?.cancel()
+            stoppingWorkItem = nil
+        }
 
         switch state {
         case .idle:
@@ -205,6 +213,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             starGetView?.isHidden = true
             castWaitDialog.waitDialogView.isHidden = false
             castWaitDialog.statusLbl.isHidden = false
+            castWaitDialog.statusLbl.text = "待機中"
             castWaitDialog.cancelWaitBtn.isEnabled = true
             castWaitDialog.cancelWaitBtn.alpha = 1.0
 
@@ -217,6 +226,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             starGetView?.isHidden = true
             castWaitDialog.waitDialogView.isHidden = false
             castWaitDialog.statusLbl.isHidden = false
+            castWaitDialog.statusLbl.text = "待機中"
             castWaitDialog.allCoverMessage.isHidden = true
             castWaitDialog.allCoverRequest.isHidden = true
             castWaitDialog.topInfoLabel.isHidden = true
@@ -234,6 +244,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             starGetView?.isHidden = true   // 必要時のみ表示
             castWaitDialog.waitDialogView.isHidden = true
             castWaitDialog.statusLbl.isHidden = true
+            castWaitDialog.statusLbl.text = "配信中"
             castWaitDialog.allCoverMessage.isHidden = true
             castWaitDialog.allCoverRequest.isHidden = true
             castWaitDialog.topInfoLabel.isHidden = true
@@ -248,6 +259,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             starGetView?.isHidden = true
             castWaitDialog.waitDialogView.isHidden = false
             castWaitDialog.statusLbl.isHidden = false
+            castWaitDialog.statusLbl.text = "準備中..."
 
         case .stopping:
             // 解除中: 配信UI非表示 + 操作無効化
@@ -262,8 +274,10 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             // 解除ボタンも無効化
             castWaitDialog.cancelWaitBtn.isEnabled = false
             castWaitDialog.cancelWaitBtn.alpha = 0.5
-            castWaitDialog.statusLbl.text = "解除中..."
+            castWaitDialog.statusLbl.text = "解除中"
         }
+
+        print("[NewSDK][UI] updateUI done: statusLbl.text=\"\(castWaitDialog.statusLbl.text ?? "nil")\" hidden=\(castWaitDialog.statusLbl.isHidden)")
     }
 
     /*
