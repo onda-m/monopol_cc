@@ -98,12 +98,12 @@ class CastSelectViewController2: UIViewController,UIScrollViewDelegate,UICollect
     var strSelectLiveUserId: String = ""
     var strSelectReserveUserId: String = ""
     var strSelectReservePeerId: String = ""
-    var strSelectReserveFlg: String = ""
+    var strSelectReserveFlg: String = "0"
     var strSelectConnectLevel: String = ""
     var strSelectConnectExp: String = ""
     var strSelectConnectLiveCount: String = ""
     var strSelectConnectPresentPoint: String = ""
-    var strSelectBlackListId: String = ""
+    var strSelectBlackListId: String = "0"
     
     struct SelectUserResult: Codable {
         let user_id: String
@@ -2116,31 +2116,58 @@ class CastSelectViewController2: UIViewController,UIScrollViewDelegate,UICollect
             //let user_id = UserDefaults.standard.integer(forKey: "user_id")
             
             //ストリーマーの状態を取得
+            let castUserId = self.castList[buttonRow].user_id
+            let myUserId = String(self.user_id)
             var stringUrl = Util.URL_USER_INFO
             stringUrl.append("?user_id=")
-            stringUrl.append(self.castList[buttonRow].user_id)
+            stringUrl.append(castUserId)
             stringUrl.append("&my_user_id=")
-            stringUrl.append(String(self.user_id))
-            print(stringUrl)
-            
+            stringUrl.append(myUserId)
+
+            let reqCallId = String(UUID().uuidString.prefix(6))
+            print("[REQAPI] enter userId=\(castUserId) myUserId=\(myUserId) callId=\(reqCallId) url=\(stringUrl)")
+
             // Swift4からは書き方が変わりました。
             let url = URL(string: stringUrl.addingPercentEncoding(withAllowedCharacters: NSCharacterSet.urlQueryAllowed)!)!
             let req = URLRequest(url: url)
-            
+            let dedupKey = "getUserInfoByUserId/\(castUserId)/\(myUserId)"
+
             //非同期処理を行う
             let dispatchGroup = DispatchGroup()
             let dispatchQueue = DispatchQueue(label: "queue", attributes: .concurrent)
-            
+
             dispatchGroup.enter()
+            print("[GROUP][main] enter name=liveStartRequest callId=\(reqCallId)")
             dispatchQueue.async {
-                let task = URLSession.shared.dataTask(with: req, completionHandler: {
-                    (data, res, err) in
+                HTTPDiagnostics.shared.dataTask(with: req, dedupKey: dedupKey) { (data, res, err) in
+                    defer {
+                        let t = Thread.isMainThread ? "main" : "bg"
+                        print("[GROUP][\(t)] leave name=liveStartRequest callId=\(reqCallId)")
+                        dispatchGroup.leave()
+                    }
+
+                    if let err = err {
+                        let e = err as NSError
+                        print("[REQAPI] fail callId=\(reqCallId) domain=\(e.domain) code=\(e.code) userId=\(castUserId) myUserId=\(myUserId)")
+                        // API失敗時は安全な既定値（弾かない方向）にフォールバック
+                        self.strSelectReserveFlg = "0"
+                        self.strSelectBlackListId = "0"
+                        print("[REQAPI] fallback callId=\(reqCallId) usedFallback=true reserveFlg=0 blackListId=0")
+                        return
+                    }
+                    guard let data = data else {
+                        print("[REQAPI] fail callId=\(reqCallId) reason=nilData userId=\(castUserId) myUserId=\(myUserId)")
+                        self.strSelectReserveFlg = "0"
+                        self.strSelectBlackListId = "0"
+                        print("[REQAPI] fallback callId=\(reqCallId) usedFallback=true reserveFlg=0 blackListId=0")
+                        return
+                    }
+
                     do{
                         //JSONDecoderのインスタンス取得
                         let decoder = JSONDecoder()
                         //受けとったJSONデータをパースして格納
-                        let json = try decoder.decode(SelectResultJson.self, from: data!)
-                        //self.idCount = json.count
+                        let json = try decoder.decode(SelectResultJson.self, from: data)
                         //モデル詳細を配列にする。(ただしゼロ番目のみ参照可能)
                         for obj in json.result {
                             self.strSelectUserId = obj.user_id
@@ -2158,46 +2185,33 @@ class CastSelectViewController2: UIViewController,UIScrollViewDelegate,UICollect
                             self.strSelectConnectLiveCount = obj.connect_live_count//視聴回数
                             self.strSelectConnectPresentPoint = obj.connect_present_point//プレゼントしたポイント
                             self.strSelectBlackListId = obj.black_list_id
-                            
+
                             break
                         }
-                        
-                        //print(json.result)
-                        dispatchGroup.leave()//サブタスク終了時に記述
+
+                        print("[REQAPI] success callId=\(reqCallId) reserveFlg=\(self.strSelectReserveFlg) blackListId=\(self.strSelectBlackListId) userId=\(castUserId) myUserId=\(myUserId)")
                     }catch{
-                        //エラー処理
-                        //print("エラーが出ました")
+                        //エラー処理 — デコード失敗時も安全な既定値
+                        print("[REQAPI] decodeFail callId=\(reqCallId) error=\(error.localizedDescription) userId=\(castUserId) myUserId=\(myUserId)")
+                        self.strSelectReserveFlg = "0"
+                        self.strSelectBlackListId = "0"
+                        print("[REQAPI] fallback callId=\(reqCallId) usedFallback=true reserveFlg=0 blackListId=0")
                     }
-                })
-                task.resume()
+                }
             }
             // 全ての非同期処理完了後にメインスレッドで処理
             dispatchGroup.notify(queue: .main) {
+                print("[GROUP][main] notify name=liveStartRequest callId=\(reqCallId)")
                 /**********************************/
                 //第一段階のエラーチェック
                 //「申請中」になる直前のチェック（MySQLを使用したチェックのみ）
                 /**********************************/
-                /*
-                 //キャストの情報を取得して判断する
-                 //予約拒否フラグが立っている場合・またはブラックリストに入っている場合
-                 UtilStr.ERROR_SELECT_STREAMER_001 = "現在、予約申請をすることができません。"
-                 //予約がすでに埋まっている場合
-                 UtilStr.ERROR_SELECT_STREAMER_002 = "すでに予約が埋まっています。"
-                 //ログオフ状態の場合
-                 UtilStr.ERROR_SELECT_STREAMER_003 = "現在、サシライブを行っていません。"
-                 //通常の申請時にブラックリストに入っている場合、またはなんらかのエラー
-                 UtilStr.ERROR_SELECT_STREAMER_004 = "現在、サシライブの申請をすることができません。"
-                 
-                 //数秒後に勝手に閉じる
-                 //使い方
-                 //UtilFunc.showAlert(message:"", vc:self.parentViewController()!)
-                 //UtilFunc.showAlert(message:"", vc:self)
-                 UtilFunc.showAlert(message:String, vc:UIViewController) {
-                 */
+
                 //var errorFlgTemp = 0//1:何らかのエラーがありリクエストが送れない場合
-                
+
                 if(Int(self.castList[buttonRow].user_id)! > 0){
                     //配信リクエストのダイアログを表示
+                    print("[REQCHK] reserveFlg=\(self.strSelectReserveFlg) blackListId=\(self.strSelectBlackListId) userId=\(castUserId) myUserId=\(myUserId) callId=\(reqCallId)")
                     if(self.strSelectReserveFlg == "1" || self.strSelectBlackListId != "0"){
                         //予約拒否状態 or ブラックリストに自分が入っている
                         UtilFunc.showAlert(message:UtilStr.ERROR_SELECT_STREAMER_001, vc:self, sec:2.0)
