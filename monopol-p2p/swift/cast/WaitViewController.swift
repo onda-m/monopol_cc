@@ -107,6 +107,8 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     //ストリーマー側ライブ配信の接続用
     var peer: SKWPeer?
     //var peer_temp: SKWPeer?//ダミー用
+    /// SkyWay Peer が OPEN 状態かどうか（OnConnectionFailed/timeout 後は false）
+    var isSkyWayReady: Bool = false
     var mediaConnection: SKWMediaConnection?
     //var localStream: SKWMediaStream?
 //    var remoteStream: SKWMediaStream?//重要
@@ -823,28 +825,33 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             //print("フォアグラウンド復帰時")
             //self.setup()
 
-            UtilFunc.isPeerIdExist(peer: self.peer!, peerId: String(self.user_id)){ (flg) in
+            guard let peer = self.peer else {
+                print("[SKYWAY] onDidBecomeActive: peer is nil, skipping isPeerIdExist (will re-init via setup if needed)")
+                return
+            }
+            UtilFunc.isPeerIdExist(peer: peer, peerId: String(self.user_id)){ (flg) in
                 if(flg == false){
                     //接続されていない場合(バックグラウンドにある場合)
                     //正常状態(人的操作によるもの)にする
                     self.listenerErrorFlg = 1
-                    self.appDelegate.localStream!.removeVideoRenderer(self.localStreamView, track: 0)
-                    
+                    self.appDelegate.localStream?.removeVideoRenderer(self.localStreamView, track: 0)
+
+                    self.isSkyWayReady = false
                     let option: SKWPeerOption = SKWPeerOption.init();
                     option.key = Util.skywayAPIKey
                     option.domain = Util.skywayDomain
-                    
+
                     //peer = SKWPeer(options: option)
                     //idにはuser_idを入れる
                     self.peer = SKWPeer(id: String(self.user_id), options: option)
-                    
+
                     if let _peer = self.peer{
                         self.setupPeerCallBacks(peer: _peer)
                         self.setupStream(peer: _peer)
                     }else{
-                        print("failed to create peer setup")
+                        print("[SKYWAY_ERR] onDidBecomeActive: failed to create peer")
                     }
-                    
+
                 }else{
                     //PEERだけが繋がっている場合
                     //一旦ローカルストリームをクローズ(必須)
@@ -1427,36 +1434,78 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             }
             
             for item in (snap.children) {
-                // 中身の取り出し
-                let snapshot = item as! DataSnapshot
-                let dict = snapshot.value as! [String: Any]
-                print(dict)
-                //print(dict["user_id"] as Any)
-                //print(dict["cast_id"] as Any)
-                
+                // --- callId: このリクエスト処理単位を追跡するID ---
+                let callId = String(UUID().uuidString.prefix(6))
+
+                // 中身の取り出し（安全キャスト — as! を撤去）
+                guard let snapshot = item as? DataSnapshot else {
+                    print("[WAITREQ][\(callId)] fail reason=item_not_DataSnapshot")
+                    continue
+                }
+                guard let dict = snapshot.value as? [String: Any] else {
+                    print("[WAITREQ][\(callId)] fail reason=value_not_dict snapshotValue=\(String(describing: snapshot.value))")
+                    continue
+                }
+                print("[WAITREQ][\(callId)] payload=\(dict)")
+
                 if(dict["user_id"] == nil || dict["cast_id"] == nil){
+                    print("[WAITREQ][\(callId)] fail reason=nil_user_id_or_cast_id payloadKeys=\(dict.keys.sorted())")
                     //いったんFireBaseのデータを削除する
                     //self.rootRef.child(Util.INIT_FIREBASE + "/" + String(self.user_id)).removeValue()
-                    return
+                    continue
                 }
-                
-                self.castWaitDialog.get_user_id  = dict["user_id"] as! Int
-                self.castWaitDialog.get_cast_id  = dict["cast_id"] as! Int
+
+                // --- 安全な型変換（Int / String どちらが来ても対応。強制アンラップなし） ---
+                let rawUserId = dict["user_id"]
+                guard let getUserId = (rawUserId as? Int) ?? Int("\(rawUserId ?? "")") else {
+                    print("[WAITREQ][\(callId)] fail reason=invalid_user_id raw=\(rawUserId as Any)")
+                    continue
+                }
+                let rawCastId = dict["cast_id"]
+                guard let getCastId = (rawCastId as? Int) ?? Int("\(rawCastId ?? "")") else {
+                    print("[WAITREQ][\(callId)] fail reason=invalid_cast_id raw=\(rawCastId as Any)")
+                    continue
+                }
+                let rawStatus = dict["status"]
+                guard let getStatus = (rawStatus as? Int) ?? Int("\(rawStatus ?? "")") else {
+                    print("[WAITREQ][\(callId)] fail reason=invalid_status raw=\(rawStatus as Any)")
+                    continue
+                }
+
+                self.castWaitDialog.get_user_id  = getUserId
+                self.castWaitDialog.get_cast_id  = getCastId
                 //status = 1:申請中 2:申請したけど拒否された 3:申請が取り消された 99:接続が承認された
-                self.castWaitDialog.status  = dict["status"] as! Int
-                
+                self.castWaitDialog.status  = getStatus
+
                 if(self.user_id == self.castWaitDialog.get_cast_id && self.castWaitDialog.status == 1){
                     //自分への通常リクエストの場合
                     self.castWaitDialog.get_user_name  = dict["user_name"] as? String
-                    self.castWaitDialog.get_user_photo_flg = dict["user_photo_flg"] as! Int
+                    let rawPhotoFlg = dict["user_photo_flg"]
+                    self.castWaitDialog.get_user_photo_flg = (rawPhotoFlg as? Int) ?? Int("\(rawPhotoFlg ?? "")") ?? 0
                     self.castWaitDialog.get_user_photo_name = dict["user_photo_name"] as? String
 
-                    UtilFunc.isPeerIdExist(peer: self.peer!, peerId: String(self.user_id)){ (flg) in
+                    print("[WAITREQ][\(callId)] requestDialog pre-check cast_id=\(getCastId) user_id=\(getUserId) status=\(getStatus) user_name=\(self.castWaitDialog.get_user_name ?? "nil") photo_flg=\(self.castWaitDialog.get_user_photo_flg) isSkyWayReady=\(self.isSkyWayReady)")
+
+                    // --- isSkyWayReady チェック: OnConnectionFailed/timeout 後は false ---
+                    guard self.isSkyWayReady else {
+                        print("[WAITREQ][\(callId)] skip reason=isSkyWayReady_is_false (SkyWay接続失敗/timeout後)")
+                        continue
+                    }
+
+                    // --- peer nil ガード: continue で他のスナップショット処理を止めない ---
+                    guard let peer = self.peer else {
+                        print("[WAITREQ][\(callId)] skip reason=peer_is_nil (SkyWay未初期化/破棄済み)")
+                        continue
+                    }
+
+                    UtilFunc.isPeerIdExist(peer: peer, peerId: String(self.user_id)){ (flg) in
                         if(flg == false){
                             //接続されていない場合(バックグラウンドにある場合)
                             //ここでは何もしない＞処理は、WaitViewController+CommonSkywayの待機完了後に行う。
+                            print("[WAITREQ][\(callId)] peer not connected (background), skipping requestDialogDo")
                         }else{
                             //フォアグラウンドにある場合
+                            print("[WAITREQ][\(callId)] requestDialogDo invoked")
                             self.castWaitDialog.requestDialogDo()
                         }
                     }
@@ -1604,8 +1653,13 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
         self.listenerErrorFlg = 1
         self.mediaConnection?.close()
         self.dataConnection?.close()
-        self.peer!.disconnect()
-        self.peer!.destroy()
+        if let peer = self.peer {
+            peer.disconnect()
+            peer.destroy()
+        } else {
+            print("[SKYWAY] commonWaitDo: peer is already nil, skipping disconnect/destroy")
+        }
+        self.isSkyWayReady = false
 
         //非表示
         self.userInfoDialog.isHidden = true

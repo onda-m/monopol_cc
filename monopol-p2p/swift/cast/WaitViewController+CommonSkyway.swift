@@ -220,7 +220,15 @@ extension WaitViewController{
             self.view.bringSubviewToFront(self.busyIndicator)
         }
         
-        if(self.peer == nil || self.peer!.isDestroyed == true || self.peer!.isDisconnected == true){
+        // peer が nil / destroyed / disconnected なら再作成
+        let needsNewPeer: Bool = {
+            guard let p = self.peer else { return true }
+            return p.isDestroyed || p.isDisconnected
+        }()
+
+        if needsNewPeer {
+            print("[SKYWAY] setup: peer is nil/destroyed/disconnected — creating new peer")
+            self.isSkyWayReady = false
             let option: SKWPeerOption = SKWPeerOption.init();
             option.key = Util.skywayAPIKey
             option.domain = Util.skywayDomain
@@ -231,10 +239,14 @@ extension WaitViewController{
                 self.setupPeerCallBacks(peer: _peer)
                 self.setupStream(peer: _peer)
             }else{
-                print("failed to create peer setup")
+                print("[SKYWAY_ERR] setup: failed to create peer")
             }
         }else{
-            UtilFunc.isPeerIdExist(peer: self.peer!, peerId: String(self.user_id)){ (flg) in
+            guard let peer = self.peer else {
+                print("[SKYWAY_ERR] setup: peer became nil unexpectedly after needsNewPeer check")
+                return
+            }
+            UtilFunc.isPeerIdExist(peer: peer, peerId: String(self.user_id)){ (flg) in
                 if(flg == false){
                     //接続されていない場合(バックグラウンドにある場合)
                     //self.appDelegate.peer!.disconnect()
@@ -243,22 +255,23 @@ extension WaitViewController{
 
                     //正常状態(人的操作によるもの)にする
                     self.listenerErrorFlg = 1
-                    self.appDelegate.localStream!.removeVideoRenderer(self.localStreamView, track: 0)
-                    
+                    self.appDelegate.localStream?.removeVideoRenderer(self.localStreamView, track: 0)
+
+                    self.isSkyWayReady = false
                     let option: SKWPeerOption = SKWPeerOption.init();
                     option.key = Util.skywayAPIKey
                     option.domain = Util.skywayDomain
-                    
+
                     //idにはuser_idを入れる
                     self.peer = SKWPeer(id: String(self.user_id), options: option)
-                    
+
                     if let _peer = self.peer{
                         self.setupPeerCallBacks(peer: _peer)
                         self.setupStream(peer: _peer)
                     }else{
-                        print("failed to create peer setup")
+                        print("[SKYWAY_ERR] setup: failed to create peer (reconnect path)")
                     }
-                    
+
                 }else{
                     //PEERだけが繋がっている場合
                 }
@@ -285,9 +298,13 @@ extension WaitViewController{
     
     //通話の接続
     func call(targetPeerId:String){
+        guard let peer = self.peer else {
+            print("[SKYWAY_ERR] call: peer is nil, cannot call targetPeerId=\(targetPeerId)")
+            return
+        }
         let option = SKWCallOption()
-        
-        if let mediaConnection = self.peer!.call(withId: targetPeerId, stream: self.appDelegate.localStream, options: option){
+
+        if let mediaConnection = peer.call(withId: targetPeerId, stream: self.appDelegate.localStream, options: option){
             self.mediaConnection = mediaConnection
             self.setupMediaConnectionCallbacks(mediaConnection: mediaConnection)
         }else{
@@ -297,11 +314,15 @@ extension WaitViewController{
     
     //チャットの接続
     func connect(targetPeerId:String){
+        guard let peer = self.peer else {
+            print("[SKYWAY_ERR] connect: peer is nil, cannot connect targetPeerId=\(targetPeerId)")
+            return
+        }
         let options = SKWConnectOption()
         options.serialization = SKWSerializationEnum.SERIALIZATION_BINARY
-        
+
         //接続
-        if let dataConnection = self.peer!.connect(withId: targetPeerId, options: options){
+        if let dataConnection = peer.connect(withId: targetPeerId, options: options){
             self.dataConnection = dataConnection
             self.setupDataConnectionCallbacks(dataConnection: dataConnection)
         }else{
@@ -318,7 +339,8 @@ extension WaitViewController{
         //待機がエラーとなった時に呼ばれる(???)
         peer.on(SKWPeerEventEnum.PEER_EVENT_ERROR, callback:{ (obj) -> Void in
             if let error = obj as? SKWPeerError{
-                print("\(error)")
+                print("[SKYWAY_ERR] PEER_EVENT_ERROR: \(error) isSkyWayReady→false")
+                self.isSkyWayReady = false
 
                 /******************************/
                 //アンロック
@@ -340,7 +362,9 @@ extension WaitViewController{
         //待機が完了した時に呼ばれる
         peer.on(SKWPeerEventEnum.PEER_EVENT_OPEN,callback:{ (obj) -> Void in
             if let peerId = obj as? String{
-                
+                self.isSkyWayReady = true
+                print("[SKYWAY] PEER_EVENT_OPEN: isSkyWayReady→true peerId=\(peerId)")
+
                 DispatchQueue.main.async {
                     //print("待機完了")
                     
@@ -654,14 +678,20 @@ extension WaitViewController{
                         }
                         
                         //let dict = snap.value as! [String : AnyObject]
-                        let dict = snap.value as! NSDictionary
+                        guard let dict = snap.value as? NSDictionary else {
+                            print("[WAIT] conditionRef: snap.value is not NSDictionary, value=\(String(describing: snap.value))")
+                            return
+                        }
                         //print(dict.values)
 
                         //status_listener = 5:異常終了からの復帰(リスナー側)
                         //０：サシライブ中でない、１：待機が完了、２：サシライブ中、３：バツボタンで終了、
                         //４：コインがなく延長ができなくなった時、５：リスナーが異常終了した時(未使用)、
                         //６：リスナーが異常終了から復帰した時、7：復帰完了（一時的）＞リスナー側は現時間を反映し「２：サシライブ中」に状態変更する
-                        let status_listener = dict["status_listener"] as! Int
+                        guard let status_listener = dict["status_listener"] as? Int else {
+                            print("[WAIT] conditionRef: status_listener missing or not Int, raw=\(dict["status_listener"] as Any)")
+                            return
+                        }
                         
                         if(status_listener == 3 || status_listener == 4){
                             //リスナーがバツボタンを押して終わった(またはリスナーのコインがなくなった場合)
@@ -697,8 +727,8 @@ extension WaitViewController{
                         }
 
                         //延長時のスターをゲット
-                        let cast_add_star = dict["cast_add_star"] as! Int
-                        let cast_add_point = dict["cast_add_point"] as! Int
+                        let cast_add_star = (dict["cast_add_star"] as? Int) ?? 0
+                        let cast_add_point = (dict["cast_add_point"] as? Int) ?? 0
                         if(cast_add_star > 0 || cast_add_point > 0){
                             //0に戻す
                             let data = ["cast_add_star": 0, "cast_add_point": 0]
@@ -720,8 +750,8 @@ extension WaitViewController{
                         }
                         
                         //プレゼントゲット
-                        let present_star = dict["present_star"] as! Int
-                        let present_point = dict["present_point"] as! Int
+                        let present_star = (dict["present_star"] as? Int) ?? 0
+                        let present_point = (dict["present_point"] as? Int) ?? 0
                         if(present_star > 0 || present_point > 0){
                             //0に戻す
                             let data = ["present_star": 0, "present_point": 0]
@@ -823,7 +853,10 @@ extension WaitViewController{
         // MARK: DATACONNECTION_EVENT_DATA
         //何かメッセージがきた時に呼ばれる
         dataConnection.on(SKWDataConnectionEventEnum.DATACONNECTION_EVENT_DATA, callback: { (obj) -> Void in
-            let strValue:String = obj as! String
+            guard let strValue = obj as? String else {
+                print("[WAIT] DATACONNECTION_EVENT_DATA: obj is not String, type=\(type(of: obj)), value=\(String(describing: obj))")
+                return
+            }
             
             if(strValue.contains("画面リフレッシュ"))
             {
