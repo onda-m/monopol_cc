@@ -562,55 +562,91 @@ class MediaConnectionViewController: UIViewController,UITextViewDelegate ,UITabB
             stringUrl.append(liveCastId)
             stringUrl.append("&my_user_id=")
             stringUrl.append(String(self.user_id))
-            
+
+            let clCallId = String(UUID().uuidString.prefix(6))
+            let clThread = Thread.isMainThread ? "main" : "bg"
+            print("[CONNECTLVL][\(clThread)] enter userId=\(liveCastId) myUserId=\(self.user_id) callId=\(clCallId)")
+
             // Swift4からは書き方が変わりました。
             let url = URL(string: stringUrl.addingPercentEncoding(withAllowedCharacters: NSCharacterSet.urlQueryAllowed)!)!
             let req = URLRequest(url: url)
-            
+            let dedupKey = "connectLevel/\(liveCastId)/\(self.user_id)"
+
             //非同期処理を行う
             let dispatchGroup = DispatchGroup()
             let dispatchQueue = DispatchQueue(label: "queue", attributes: .concurrent)
-            
+
             dispatchGroup.enter()
+            print("[GROUP][\(clThread)] enter name=connectLevel callId=\(clCallId)")
             dispatchQueue.async {
-                let task = URLSession.shared.dataTask(with: req, completionHandler: {
-                    (data, res, err) in
+                HTTPDiagnostics.shared.dataTask(with: req, dedupKey: dedupKey) { (data, res, err) in
+                    // defer で leave を保証（成功/失敗/例外すべて）
+                    // 旧コード: leave() が do ブロック内のみ → catch/err時にleave漏れ → notify永久未発火
+                    defer {
+                        let t = Thread.isMainThread ? "main" : "bg"
+                        print("[GROUP][\(t)] leave name=connectLevel callId=\(clCallId)")
+                        dispatchGroup.leave()
+                    }
+
+                    // エラーチェック（data==nil でのクラッシュ防止）
+                    if let err = err {
+                        let e = err as NSError
+                        let t = Thread.isMainThread ? "main" : "bg"
+                        print("[CONNECTLVL][\(t)] fail callId=\(clCallId) domain=\(e.domain) code=\(e.code)")
+                        // API失敗時はデフォルト値を設定してnotifyへ進む（入室を止めない）
+                        UserDefaults.standard.set("1", forKey: "sendConnectLevel")
+                        UserDefaults.standard.set("1.0", forKey: "sendConnectBonusRate")
+                        return
+                    }
+                    guard let data = data else {
+                        let t = Thread.isMainThread ? "main" : "bg"
+                        print("[CONNECTLVL][\(t)] fail callId=\(clCallId) reason=nilData")
+                        UserDefaults.standard.set("1", forKey: "sendConnectLevel")
+                        UserDefaults.standard.set("1.0", forKey: "sendConnectBonusRate")
+                        return
+                    }
+
                     do{
                         //JSONDecoderのインスタンス取得
                         let decoder = JSONDecoder()
                         //受けとったJSONデータをパースして格納
-                        let json = try decoder.decode(ResultConnectJson.self, from: data!)
-                        //self.idCount = json.count
-                        
+                        let json = try decoder.decode(ResultConnectJson.self, from: data)
+
                         //ただしゼロ番目のみ参照可能
                         for obj in json.result {
-                            
+
                             //データが取得できなかった場合を考慮
                             if(obj.level == "" || obj.level == "0"){
                                 UserDefaults.standard.set("1", forKey: "sendConnectLevel")
                             }else{
                                 UserDefaults.standard.set(obj.level, forKey: "sendConnectLevel")
                             }
-                            
+
                             if(obj.bonus_rate == "" || obj.bonus_rate == "0"){
                                 UserDefaults.standard.set("1.0", forKey: "sendConnectBonusRate")
                             }else{
                                 UserDefaults.standard.set(obj.bonus_rate, forKey: "sendConnectBonusRate")
                             }
-                            
+
                             break
                         }
-                        //print(json.result)
-                        dispatchGroup.leave()//サブタスク終了時に記述
+
+                        let t = Thread.isMainThread ? "main" : "bg"
+                        print("[CONNECTLVL][\(t)] success callId=\(clCallId) count=\(json.result.count)")
                     }catch{
-                        //エラー処理
-                        //print("エラーが出ました")
+                        //エラー処理 — デフォルト値でフォールバック（入室を止めない）
+                        let t = Thread.isMainThread ? "main" : "bg"
+                        print("[CONNECTLVL][\(t)] decodeFail callId=\(clCallId) error=\(error.localizedDescription)")
+                        UserDefaults.standard.set("1", forKey: "sendConnectLevel")
+                        UserDefaults.standard.set("1.0", forKey: "sendConnectBonusRate")
                     }
-                })
-                task.resume()
+                }
             }
             // 全ての非同期処理完了後にメインスレッドで処理
             dispatchGroup.notify(queue: .main) {
+                let next = self.useNewSDK ? "joinRoomUsingNewSDK" : "setup"
+                print("[GROUP][main] notify name=connectLevel callId=\(clCallId) next=\(next)")
+
                 // Phase2-4c: 新SDK分岐
                 if self.useNewSDK {
                     // TODO: use stable castId as roomName (現在はキャストのpeerId=UUIDを暫定使用)
@@ -625,7 +661,7 @@ class MediaConnectionViewController: UIViewController,UITextViewDelegate ,UITabB
                     //skywayの待機処理(一度待機状態へ)
                     self.setup()
                 }
-                
+
                 //メッセージの初期化
                 self.messages.removeAll()
                 //self.getChatRirekiByUser()
@@ -1065,26 +1101,50 @@ class MediaConnectionViewController: UIViewController,UITextViewDelegate ,UITabB
         stringUrl.append(liveCastId)
         stringUrl.append("&my_user_id=")
         stringUrl.append(String(self.user_id))
-        
+
+        let callId = String(UUID().uuidString.prefix(6))
+        let thread = Thread.isMainThread ? "main" : "bg"
+        print("[CASTINFO][\(thread)] enter userId=\(liveCastId) myUserId=\(self.user_id) callId=\(callId)")
+
         // Swift4からは書き方が変わりました。
         let url = URL(string: stringUrl.addingPercentEncoding(withAllowedCharacters: NSCharacterSet.urlQueryAllowed)!)!
         let req = URLRequest(url: url)
-        
+        let dedupKey = "getUserInfoByUserId/\(liveCastId)/\(self.user_id)"
+
         //非同期処理を行う
         let dispatchGroup = DispatchGroup()
         let dispatchQueue = DispatchQueue(label: "queue", attributes: .concurrent)
-        
+
         dispatchGroup.enter()
+        print("[GROUP][\(thread)] enter name=castInfo callId=\(callId)")
         dispatchQueue.async {
-            let task = URLSession.shared.dataTask(with: req, completionHandler: {
-                (data, res, err) in
+            HTTPDiagnostics.shared.dataTask(with: req, dedupKey: dedupKey) { (data, res, err) in
+                // defer で leave を保証（成功/失敗/例外すべて）
+                defer {
+                    let t = Thread.isMainThread ? "main" : "bg"
+                    print("[GROUP][\(t)] leave name=castInfo callId=\(callId)")
+                    dispatchGroup.leave()
+                }
+
+                // エラーチェック（data==nil でのクラッシュ防止）
+                if let err = err {
+                    let e = err as NSError
+                    let t = Thread.isMainThread ? "main" : "bg"
+                    print("[CASTINFO][\(t)] fail callId=\(callId) domain=\(e.domain) code=\(e.code)")
+                    return
+                }
+                guard let data = data else {
+                    let t = Thread.isMainThread ? "main" : "bg"
+                    print("[CASTINFO][\(t)] fail callId=\(callId) reason=nilData")
+                    return
+                }
+
                 do{
                     //JSONDecoderのインスタンス取得
                     let decoder = JSONDecoder()
                     //受けとったJSONデータをパースして格納
-                    let json = try decoder.decode(UtilStruct.ResultJson.self, from: data!)
-                    //self.idCount = json.count
-                    
+                    let json = try decoder.decode(UtilStruct.ResultJson.self, from: data)
+
                     //モデル詳細を配列にする。(ただしゼロ番目のみ参照可能)
                     for obj in json.result {
                         self.strUserId = obj.user_id
@@ -1121,22 +1181,23 @@ class MediaConnectionViewController: UIViewController,UITextViewDelegate ,UITabB
                         self.strConnectLiveCount = obj.connect_live_count//視聴回数
                         self.strConnectPresentPoint = obj.connect_present_point//プレゼントしたポイント
                         self.strBlackListId = obj.black_list_id
-                        
+
                         break
                     }
-                    
-                    //print(json.result)
-                    dispatchGroup.leave()//サブタスク終了時に記述
+
+                    let t = Thread.isMainThread ? "main" : "bg"
+                    print("[CASTINFO][\(t)] success callId=\(callId) count=\(json.result.count)")
                 }catch{
                     //エラー処理
-                    //print("エラーが出ました")
+                    let t = Thread.isMainThread ? "main" : "bg"
+                    print("[CASTINFO][\(t)] decodeFail callId=\(callId) error=\(error.localizedDescription)")
                 }
-            })
-            task.resume()
+            }
         }
         // 全ての非同期処理完了後にメインスレッドで処理
         dispatchGroup.notify(queue: .main) {
-            //self.CollectionView.reloadData()
+            print("[GROUP][main] notify name=castInfo callId=\(callId) next=none")
+            //getCastInfo単独のnotifyは後続処理なし（プロパティ設定のみで完結）
         }
     }
     

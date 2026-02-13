@@ -393,6 +393,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate ,PurchaseManagerDelegate {
         
         //アプリ起動中、勝手にスリープしないようにする
         UIApplication.shared.isIdleTimerDisabled = true
+
+        // RST診断モード（DEBUGビルドのみ有効、本番影響なし）
+        #if DEBUG
+        HTTPDiagnostics.shared.useDiagnosticSession = true
+        HTTPDiagnostics.shared.limitMaxConnections = true
+        HTTPDiagnostics.shared.useShortTimeout = true
+        HTTPDiagnostics.shared.ignoreCacheData = true
+        HTTPDiagnostics.shared.applyConfig()
+        print("[DIAG] HTTPDiagnostics enabled: maxConn=1 timeout=15s cache=ignore")
+        #endif
         
         //インターネットに接続されているかの確認
         do {
