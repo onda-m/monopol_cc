@@ -109,6 +109,16 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     //var peer_temp: SKWPeer?//ダミー用
     /// SkyWay Peer が OPEN 状態かどうか（OnConnectionFailed/timeout 後は false）
     var isSkyWayReady: Bool = false
+    /// SkyWay未準備時に受信したリクエストを保持（1件）
+    var pendingRequest: (callId: String, cast_id: Int, user_id: Int, status: Int, user_name: String?, photo_flg: Int, photo_name: String?)?
+    /// 承認ボタン押下後、SkyWay OPEN待ちかどうか
+    var isPendingApproval: Bool = false
+    /// 承認待ち中のcompletion
+    var pendingApprovalCompletion: (() -> Void)?
+    /// SkyWay再接続中フラグ（多重発火防止）
+    var isReconnecting: Bool = false
+    /// 再接続リトライ回数（setupSkyWayReconnect内で使用）
+    private var reconnectRetryCount: Int = 0
     var mediaConnection: SKWMediaConnection?
     //var localStream: SKWMediaStream?
 //    var remoteStream: SKWMediaStream?//重要
@@ -1486,28 +1496,29 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
 
                     print("[WAITREQ][\(callId)] requestDialog pre-check cast_id=\(getCastId) user_id=\(getUserId) status=\(getStatus) user_name=\(self.castWaitDialog.get_user_name ?? "nil") photo_flg=\(self.castWaitDialog.get_user_photo_flg) isSkyWayReady=\(self.isSkyWayReady)")
 
-                    // --- isSkyWayReady チェック: OnConnectionFailed/timeout 後は false ---
-                    guard self.isSkyWayReady else {
-                        print("[WAITREQ][\(callId)] skip reason=isSkyWayReady_is_false (SkyWay接続失敗/timeout後)")
-                        continue
-                    }
+                    // pendingRequest に保存（SkyWay状態に関わらず）
+                    self.pendingRequest = (callId: callId, cast_id: getCastId, user_id: getUserId, status: getStatus, user_name: self.castWaitDialog.get_user_name, photo_flg: self.castWaitDialog.get_user_photo_flg, photo_name: self.castWaitDialog.get_user_photo_name)
 
-                    // --- peer nil ガード: continue で他のスナップショット処理を止めない ---
-                    guard let peer = self.peer else {
-                        print("[WAITREQ][\(callId)] skip reason=peer_is_nil (SkyWay未初期化/破棄済み)")
-                        continue
-                    }
-
-                    UtilFunc.isPeerIdExist(peer: peer, peerId: String(self.user_id)){ (flg) in
-                        if(flg == false){
-                            //接続されていない場合(バックグラウンドにある場合)
-                            //ここでは何もしない＞処理は、WaitViewController+CommonSkywayの待機完了後に行う。
-                            print("[WAITREQ][\(callId)] peer not connected (background), skipping requestDialogDo")
-                        }else{
-                            //フォアグラウンドにある場合
-                            print("[WAITREQ][\(callId)] requestDialogDo invoked")
+                    if self.isSkyWayReady, let peer = self.peer {
+                        // SkyWay準備済み → 既存フロー
+                        UtilFunc.isPeerIdExist(peer: peer, peerId: String(self.user_id)){ (flg) in
+                            if(flg == false){
+                                //接続されていない場合(バックグラウンドにある場合)
+                                //ここでは何もしない＞処理は、WaitViewController+CommonSkywayの待機完了後に行う。
+                                print("[WAITREQ][\(callId)] peer not connected (background), skipping requestDialogDo")
+                            }else{
+                                //フォアグラウンドにある場合
+                                print("[WAITREQ][\(callId)] requestDialogDo invoked (isSkyWayReady=true)")
+                                self.castWaitDialog.requestDialogDo()
+                            }
+                        }
+                    } else {
+                        // SkyWay未準備 → ダイアログは表示するが、承認時にSkyWay再接続が必要
+                        print("[WAITREQ][\(callId)] isSkyWayReady=false, showing dialog anyway, triggering reconnect")
+                        DispatchQueue.main.async {
                             self.castWaitDialog.requestDialogDo()
                         }
+                        self.setupSkyWayReconnect(reason: "request_received_while_not_ready")
                     }
                 }
             }

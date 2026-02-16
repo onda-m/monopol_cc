@@ -331,6 +331,86 @@ extension WaitViewController{
     }
 }
 
+// MARK: - SkyWay Reconnect
+extension WaitViewController {
+    /// SkyWay再接続（リクエスト受信時/承認時にisSkyWayReady=falseの場合）
+    /// 多重発火防止付き。15秒タイムアウトで1回だけリトライ。2回目失敗でユーザー通知。
+    func setupSkyWayReconnect(reason: String) {
+        // 多重発火防止
+        guard !isReconnecting else {
+            print("[SKYWAY_RECONNECT] already reconnecting, skip (reason=\(reason))")
+            return
+        }
+        guard !isSkyWayReady else {
+            print("[SKYWAY_RECONNECT] already ready, skip (reason=\(reason))")
+            return
+        }
+        isReconnecting = true
+        // reconnectRetryCount はここでは0に戻さない（成功時 or 最終失敗時のみリセット）
+        print("[SKYWAY_RECONNECT] start reason=\(reason) isSkyWayReady=\(isSkyWayReady) peerNil=\(peer == nil) retryCount=\(reconnectRetryCount)")
+
+        // 既存接続をクリーンアップ（nil安全）
+        isSkyWayReady = false
+        dataConnection?.close()
+        mediaConnection?.close()
+        if let p = peer {
+            if !p.isDisconnected {
+                p.disconnect()
+            }
+            if !p.isDestroyed {
+                p.destroy()
+            }
+            self.peer = nil
+        }
+
+        // setup() で peer を作り直す
+        setup()
+        attemptReconnectTimeout(reason: reason)
+    }
+
+    /// 15秒タイムアウト監視。isSkyWayReady にならなければリトライ or 失敗通知。
+    private func attemptReconnectTimeout(reason: String) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15.0) { [weak self] in
+            guard let self = self else { return }
+            guard self.isReconnecting else { return } // 既に成功 or 解除済み
+
+            if self.isSkyWayReady {
+                // OPEN到達済み → 何もしない（PEER_EVENT_OPENで処理済み）
+                print("[SKYWAY_RECONNECT] already ready after timeout check, reason=\(reason)")
+                return
+            }
+
+            self.reconnectRetryCount += 1
+            if self.reconnectRetryCount < 2 {
+                // 1回だけリトライ
+                print("[SKYWAY_RECONNECT] timeout 15s, retrying once (retry=\(self.reconnectRetryCount)) reason=\(reason)")
+                // クリーンアップして再度 setup
+                if let p = self.peer {
+                    if !p.isDisconnected { p.disconnect() }
+                    if !p.isDestroyed { p.destroy() }
+                    self.peer = nil
+                }
+                self.setup()
+                self.attemptReconnectTimeout(reason: reason)
+            } else {
+                // 2回目も失敗 → 諦める
+                print("[SKYWAY_RECONNECT] failed after retry reason=\(reason)")
+                self.isReconnecting = false
+                self.reconnectRetryCount = 0
+                // pending approval をクリア
+                if self.isPendingApproval {
+                    self.isPendingApproval = false
+                    self.pendingApprovalCompletion = nil
+                }
+                // ユーザーに通知（main thread）
+                DispatchQueue.main.async {
+                    UtilFunc.showAlert(message: "接続準備に失敗しました。通信状況を確認してください。", vc: self, sec: 5.0)
+                }
+            }
+        }
+    }
+}
+
 // MARK: skyway callbacks
 extension WaitViewController{
     func setupPeerCallBacks(peer:SKWPeer){
@@ -355,9 +435,21 @@ extension WaitViewController{
                 //20200606追加
                 //申請直後リスナーが落ちたときのストリーマーがロックされてしまう問題
                 UtilFunc.deleteCastLock(cast_id:self.user_id, user_id:0, type:2)
+
+                // 承認待ち中にエラーが発生した場合、再接続を試みる（多重発火防止・main thread）
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    if self.isPendingApproval && !self.isReconnecting {
+                        let callId = self.pendingRequest?.callId ?? "unknown"
+                        print("[SKYWAY_ERR] error during pending approval, scheduling reconnect callId=\(callId)")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                            self?.setupSkyWayReconnect(reason: "peer_error_during_pending")
+                        }
+                    }
+                }
             }
         })
-        
+
         // MARK: PEER_EVENT_OPEN
         //待機が完了した時に呼ばれる
         peer.on(SKWPeerEventEnum.PEER_EVENT_OPEN,callback:{ (obj) -> Void in
@@ -411,7 +503,21 @@ extension WaitViewController{
 
                     //待機が完了後、フォアグラウンドにある場合
                     self.castWaitDialog.requestDialogDo()
-                    
+
+                    // 再接続完了フラグをクリア
+                    self.isReconnecting = false
+                    self.reconnectRetryCount = 0
+
+                    // 承認待ちの場合、completionを呼び出して承認処理を再開
+                    if self.isPendingApproval, let completion = self.pendingApprovalCompletion {
+                        let callId = self.pendingRequest?.callId ?? "unknown"
+                        print("[SKYWAY] PEER_EVENT_OPEN: resuming pending approval callId=\(callId)")
+                        self.isPendingApproval = false
+                        // nil を先にして再入防止
+                        self.pendingApprovalCompletion = nil
+                        completion()
+                    }
+
                     /******************************/
                     //アンロック
                     /******************************/
@@ -420,7 +526,7 @@ extension WaitViewController{
                     /******************************/
                     //アンロック(ここまで)
                     /******************************/
-                    
+
                     //20200606追加
                     //申請直後リスナーが落ちたときのストリーマーがロックされてしまう問題
                     UtilFunc.deleteCastLock(cast_id:self.user_id, user_id:0, type:2)
@@ -1093,5 +1199,53 @@ extension WaitViewController: CastWaitDialogDelegate {
 
         self.closeMedia()
         self.sessionClose()
+    }
+
+    /// 承認ボタン押下時にSkyWay準備状態を確認し、準備完了後にcompletionを呼ぶ。
+    /// isSkyWayReady=true なら即時実行。false なら pending にして PEER_EVENT_OPEN で再開。
+    func castWaitDialogNeedsSkyWayReady(_ dialog: CastWaitDialog, completion: @escaping () -> Void) {
+        let callId = pendingRequest?.callId ?? "unknown"
+
+        // completion を必ず main thread で実行するラッパー
+        let mainCompletion: () -> Void = {
+            if Thread.isMainThread {
+                completion()
+            } else {
+                DispatchQueue.main.async { completion() }
+            }
+        }
+
+        // --- 既に準備完了: 即時実行 ---
+        if isSkyWayReady, peer != nil {
+            print("[SKYWAY] castWaitDialogNeedsSkyWayReady: ready -> run completion immediately (callId=\(callId))")
+            DispatchQueue.main.async {
+                mainCompletion()
+            }
+            return
+        }
+
+        // --- 二重承認防止: 既に pending なら無視 ---
+        if isPendingApproval {
+            print("[SKYWAY] castWaitDialogNeedsSkyWayReady: already pending approval, ignore (callId=\(callId))")
+            return
+        }
+
+        // --- SkyWay未準備: completion を保存して再接続開始 ---
+        print("[SKYWAY] castWaitDialogNeedsSkyWayReady: not ready, store completion & reconnect (callId=\(callId))")
+        isPendingApproval = true
+        pendingApprovalCompletion = { [weak self] in
+            guard self != nil else { return }
+            DispatchQueue.main.async {
+                mainCompletion()
+            }
+        }
+
+        // isReconnecting 中なら再接続は開始しない（OPEN待ちに任せる）
+        if isReconnecting {
+            print("[SKYWAY] castWaitDialogNeedsSkyWayReady: reconnect already in progress, skip start (callId=\(callId))")
+            return
+        }
+
+        setupSkyWayReconnect(reason: "approval_button_pressed")
     }
 }

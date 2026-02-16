@@ -12,6 +12,8 @@ import FirebaseDatabase
 
 protocol CastWaitDialogDelegate: AnyObject {
     func castWaitDialogDidRequestCancelWait(_ dialog: CastWaitDialog)
+    /// 承認ボタン押下時にSkyWay準備状態を確認し、準備完了後にcompletionを呼ぶ
+    func castWaitDialogNeedsSkyWayReady(_ dialog: CastWaitDialog, completion: @escaping () -> Void)
 }
 
 class CastWaitDialog: UIView {
@@ -354,6 +356,8 @@ class CastWaitDialog: UIView {
     
     @IBAction func liveStart(_ sender: Any) {
         //配信開始ボタンを押した時
+        print("[WAITREQ] liveStart(承認ボタン) pressed user_id=\(self.get_user_id)")
+
         //データがFirebaseにあるかチェック
         let conditionRefTap = self.rootRef.child(Util.INIT_FIREBASE
             + "/"
@@ -365,49 +369,73 @@ class CastWaitDialog: UIView {
                 //「リクエスト申請がキャンセルされました。」のメッセージ
                 UtilFunc.showAlert(message:UtilStr.ERROR_SELECT_COMMON_004, vc:self.parentViewController()!, sec:3.0)
             }else{
-                //リスナー返答待ち時間(最大20秒ほど画面を暗くしてリスナーの応答を待つ)
-                let waitSecTemp = 20
-                self.timerCount = Util.REQUEST_TIMEOUT_SEC - waitSecTemp
-                //self.timerCount = 0
-                self.requestWaitFlg = 1//リスナーからの最終応答を待つ状態に
-                
-                //画面を操作させないように覆う
-                self.allCoverMessage.isHidden = false
-                self.allCoverRequest.isHidden = true
-                //self.re_connect_label.isHidden = false
-                self.bringSubviewToFront(self.allCoverMessage)
-                
-                /***************************/
-                //ラベル作成
-                /***************************/
-                self.topInfoLabel.frame = CGRect(x:0, y:0, width:UIScreen.main.bounds.width, height:0)
-                
-                self.topInfoLabel.attributedText = UtilFunc.getInsertIconString(string: UtilStr.ERROR_SELECT_COMMON_006, iconImage: UIImage(named:"live_request")!, iconSize: self.iconSize, lineHeight: 1.5)
-                
-                // テキストを中央寄せ
-                //self.infoLbl.textAlignment = NSTextAlignment.center
-                self.topInfoLabel.font = UIFont.boldSystemFont(ofSize: 16)
-                self.topInfoLabel.sizeToFit()
-                self.topInfoLabel.center = self.center
-                //最前面へ
-                self.topInfoLabel.isHidden = false
-                self.bringSubviewToFront(self.topInfoLabel)
-                /***************************/
-                //ラベル作成(ここまで)
-                /***************************/
- 
-                //status 1:申請中 2:申請したけど拒否された 99:接続が承認された
-                let conditionRef = self.rootRef.child(Util.INIT_FIREBASE
-                    + "/"
-                    + String(self.user_id) + "/" + String(self.get_user_id))
-                let data = ["status": 99, "effect_id": self.appDelegate.live_effect_id]
-                conditionRef.updateChildValues(data)
+                // 承認処理をクロージャにまとめる
+                let approvalWork = { [weak self] in
+                    guard let self = self else { return }
+                    DispatchQueue.main.async {
+                        print("[WAITREQ] proceedWithApproval start user_id=\(self.get_user_id)")
+                        self.proceedWithApproval()
+                    }
+                }
 
-                //相手の名前を共通変数に格納しておく
-                self.appDelegate.live_target_user_name = self.get_user_name
-                self.appDelegate.live_target_user_id = self.get_user_id
+                // SkyWay準備状態をdelegateに問い合わせる
+                if let delegate = self.cancelWaitDelegate {
+                    delegate.castWaitDialogNeedsSkyWayReady(self) {
+                        // SkyWay準備完了後にここが呼ばれる → 承認処理を実行
+                        approvalWork()
+                    }
+                } else {
+                    // delegate未設定時はそのまま実行（フォールバック）
+                    print("[WAITREQ] no delegate, proceeding with approval directly")
+                    approvalWork()
+                }
             }
         })
+    }
+
+    /// 承認処理の実体（liveStart から分離）
+    private func proceedWithApproval() {
+        //リスナー返答待ち時間(最大20秒ほど画面を暗くしてリスナーの応答を待つ)
+        let waitSecTemp = 20
+        self.timerCount = Util.REQUEST_TIMEOUT_SEC - waitSecTemp
+        //self.timerCount = 0
+        self.requestWaitFlg = 1//リスナーからの最終応答を待つ状態に
+
+        //画面を操作させないように覆う
+        self.allCoverMessage.isHidden = false
+        self.allCoverRequest.isHidden = true
+        //self.re_connect_label.isHidden = false
+        self.bringSubviewToFront(self.allCoverMessage)
+
+        /***************************/
+        //ラベル作成
+        /***************************/
+        self.topInfoLabel.frame = CGRect(x:0, y:0, width:UIScreen.main.bounds.width, height:0)
+
+        self.topInfoLabel.attributedText = UtilFunc.getInsertIconString(string: UtilStr.ERROR_SELECT_COMMON_006, iconImage: UIImage(named:"live_request")!, iconSize: self.iconSize, lineHeight: 1.5)
+
+        // テキストを中央寄せ
+        //self.infoLbl.textAlignment = NSTextAlignment.center
+        self.topInfoLabel.font = UIFont.boldSystemFont(ofSize: 16)
+        self.topInfoLabel.sizeToFit()
+        self.topInfoLabel.center = self.center
+        //最前面へ
+        self.topInfoLabel.isHidden = false
+        self.bringSubviewToFront(self.topInfoLabel)
+        /***************************/
+        //ラベル作成(ここまで)
+        /***************************/
+
+        //status 1:申請中 2:申請したけど拒否された 99:接続が承認された
+        let conditionRef = self.rootRef.child(Util.INIT_FIREBASE
+            + "/"
+            + String(self.user_id) + "/" + String(self.get_user_id))
+        let data = ["status": 99, "effect_id": self.appDelegate.live_effect_id]
+        conditionRef.updateChildValues(data)
+
+        //相手の名前を共通変数に格納しておく
+        self.appDelegate.live_target_user_name = self.get_user_name
+        self.appDelegate.live_target_user_id = self.get_user_id
     }
     
     @IBAction func liveDeny(_ sender: Any) {
