@@ -314,9 +314,10 @@ class CastWaitDialog: UIView {
             self.timerCount = 0
             //タイマーを動かす
             if(self.requestTimer.isValid == true){
-                //何も処理しない
+                print("[WAITREQ][TIMER] requestDialogDo: timer already running, timerCount reset to 0 get_user_id=\(self.get_user_id)")
             }else{
                 self.requestTimer =  Timer.scheduledTimer(timeInterval: 1.0, target: self, selector: #selector(self.timerCall), userInfo: nil, repeats: true)
+                print("[WAITREQ][TIMER] requestDialogDo: timer started get_user_id=\(self.get_user_id)")
             }
             self.countDownLbl.isHidden = true
             
@@ -357,6 +358,7 @@ class CastWaitDialog: UIView {
     @IBAction func liveStart(_ sender: Any) {
         //配信開始ボタンを押した時
         print("[WAITREQ] liveStart(承認ボタン) pressed user_id=\(self.get_user_id)")
+        print("[WAITREQ][APPROVAL] liveStart: get_user_id=\(self.get_user_id) timerIsValid=\(self.requestTimer.isValid) timerCount=\(self.timerCount) requestWaitFlg=\(self.requestWaitFlg)")
 
         //データがFirebaseにあるかチェック
         let conditionRefTap = self.rootRef.child(Util.INIT_FIREBASE
@@ -395,6 +397,12 @@ class CastWaitDialog: UIView {
 
     /// 承認処理の実体（liveStart から分離）
     private func proceedWithApproval() {
+        print("[WAITREQ][APPROVAL] proceedWithApproval: ENTER get_user_id=\(self.get_user_id) timerIsValid=\(self.requestTimer.isValid) timerCount=\(self.timerCount) requestWaitFlg=\(self.requestWaitFlg)")
+
+        // 承認確定後にタイムアウト処理が走らないようにタイマーを止める
+        if self.requestTimer.isValid { self.requestTimer.invalidate() }
+        print("[WAITREQ][TIMER] proceedWithApproval: requestTimer invalidated at approval timerCount=\(self.timerCount) requestWaitFlg=\(self.requestWaitFlg)")
+
         //リスナー返答待ち時間(最大20秒ほど画面を暗くしてリスナーの応答を待つ)
         let waitSecTemp = 20
         self.timerCount = Util.REQUEST_TIMEOUT_SEC - waitSecTemp
@@ -431,7 +439,14 @@ class CastWaitDialog: UIView {
             + "/"
             + String(self.user_id) + "/" + String(self.get_user_id))
         let data = ["status": 99, "effect_id": self.appDelegate.live_effect_id]
-        conditionRef.updateChildValues(data)
+        print("[WAITREQ][APPROVAL] proceedWithApproval: Firebase update start status=99 user_id=\(self.user_id) get_user_id=\(self.get_user_id)")
+        conditionRef.updateChildValues(data) { error, _ in
+            if let e = error {
+                print("[WAITREQ][APPROVAL] proceedWithApproval: Firebase update ERROR \(e)")
+            } else {
+                print("[WAITREQ][APPROVAL] proceedWithApproval: Firebase update OK status=99")
+            }
+        }
 
         //相手の名前を共通変数に格納しておく
         self.appDelegate.live_target_user_name = self.get_user_name
@@ -482,15 +497,16 @@ class CastWaitDialog: UIView {
     // タイマーで呼び出されるメソッド（65秒でタイムアウト）
     @objc func timerCall() {
         timerCount += 1
-        print("timerCount: \(timerCount)")
-        
+        print("[WAITREQ][TIMER] timerCall: timerCount=\(timerCount) requestWaitFlg=\(requestWaitFlg)")
+
         let conditionRefTap = self.rootRef.child(Util.INIT_FIREBASE
             + "/"
             + String(self.user_id))
-        
+
         if(timerCount >= Util.REQUEST_TIMEOUT_SEC){
             // タイマーを無効にする
             self.requestTimer.invalidate()
+            print("[WAITREQ][TIMER] timerCall: TIMEOUT requestWaitFlg=\(self.requestWaitFlg) get_user_id=\(self.get_user_id)")
             
             //配信拒否のボタンを押した時と同じ処理
             

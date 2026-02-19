@@ -13,11 +13,12 @@ import AVFoundation
 extension WaitViewController{
 
     func startConnection() {
+        print("[WAITREQ][TIMER] startConnection: called timerIsValid=\(castWaitDialog.requestTimer.isValid) timerCount=\(castWaitDialog.timerCount) requestWaitFlg=\(castWaitDialog.requestWaitFlg)")
         //（一時的異常状態に）初期化する
         self.listenerErrorFlg = 0
         //正常状態に初期化する
         self.listenerStatus = 0//重要
-        
+
         self.castSelectedDialog.isHidden = true
 
         DispatchQueue.main.async {
@@ -27,8 +28,9 @@ extension WaitViewController{
             /*******************************/
             //念の為、ここでも非表示
             self.castWaitDialog.topInfoLabel.isHidden = true
-            
+
             // タイムアウトのタイマーを無効にする
+            print("[WAITREQ][TIMER] startConnection: invalidating requestTimer timerCount=\(self.castWaitDialog.timerCount)")
             self.castWaitDialog.requestTimer.invalidate()
             
             //status 1:申請中 2:申請したけど拒否された 99:接続が承認された
@@ -540,7 +542,7 @@ extension WaitViewController{
         // MARK: PEER_EVENT_CONNECTION
         //通話コールされた時に呼ばれる
         peer.on(SKWPeerEventEnum.PEER_EVENT_CALL, callback: { (obj) -> Void in
-
+            print("[SKYWAY][CALL] PEER_EVENT_CALL: objType=\(type(of: obj))")
             if let connection = obj as? SKWMediaConnection{
                 //カメラなしのリスナーを考慮しコールバック処理はsetupDataConnectionCallbacksへ移動
                 //20201120
@@ -590,6 +592,7 @@ extension WaitViewController{
         // MARK: PEER_EVENT_CONNECTION
         //チャットコールされた時に呼ばれる
         peer.on(SKWPeerEventEnum.PEER_EVENT_CONNECTION, callback: { (obj) -> Void in
+            print("[SKYWAY][CALL] PEER_EVENT_CONNECTION: objType=\(type(of: obj))")
             if let connection = obj as? SKWDataConnection{
                 self.dataConnection = connection
                 self.setupDataConnectionCallbacks(dataConnection: connection)
@@ -696,7 +699,7 @@ extension WaitViewController{
         // MARK: DATACONNECTION_EVENT_OPEN
         //相手につながった時に呼ばれる＞呼ばれる
         dataConnection.on(SKWDataConnectionEventEnum.DATACONNECTION_EVENT_OPEN, callback: { (obj) -> Void in
-            
+            print("[SKYWAY][CALL] DATACONNECTION_EVENT_OPEN: objType=\(type(of: obj))")
             //20201118 add
             self.startConnection()
             
@@ -1217,7 +1220,7 @@ extension WaitViewController: CastWaitDialogDelegate {
 
         // --- 既に準備完了: 即時実行 ---
         if isSkyWayReady, peer != nil {
-            print("[SKYWAY] castWaitDialogNeedsSkyWayReady: ready -> run completion immediately (callId=\(callId))")
+            print("[SKYWAY][APPROVAL] castWaitDialogNeedsSkyWayReady: READY callId=\(callId) peerNil=\(peer == nil) timerIsValid=\(castWaitDialog.requestTimer.isValid) timerCount=\(castWaitDialog.timerCount)")
             DispatchQueue.main.async {
                 mainCompletion()
             }
@@ -1226,12 +1229,12 @@ extension WaitViewController: CastWaitDialogDelegate {
 
         // --- 二重承認防止: 既に pending なら無視 ---
         if isPendingApproval {
-            print("[SKYWAY] castWaitDialogNeedsSkyWayReady: already pending approval, ignore (callId=\(callId))")
+            print("[SKYWAY][APPROVAL] castWaitDialogNeedsSkyWayReady: ALREADY_PENDING callId=\(callId) isSkyWayReady=\(isSkyWayReady) peerNil=\(peer == nil)")
             return
         }
 
         // --- SkyWay未準備: completion を保存して再接続開始 ---
-        print("[SKYWAY] castWaitDialogNeedsSkyWayReady: not ready, store completion & reconnect (callId=\(callId))")
+        print("[SKYWAY][APPROVAL] castWaitDialogNeedsSkyWayReady: NOT_READY callId=\(callId) isSkyWayReady=\(isSkyWayReady) peerNil=\(peer == nil) isReconnecting=\(isReconnecting)")
         isPendingApproval = true
         pendingApprovalCompletion = { [weak self] in
             guard self != nil else { return }
@@ -1242,7 +1245,7 @@ extension WaitViewController: CastWaitDialogDelegate {
 
         // isReconnecting 中なら再接続は開始しない（OPEN待ちに任せる）
         if isReconnecting {
-            print("[SKYWAY] castWaitDialogNeedsSkyWayReady: reconnect already in progress, skip start (callId=\(callId))")
+            print("[SKYWAY][APPROVAL] castWaitDialogNeedsSkyWayReady: RECONNECT_IN_PROGRESS callId=\(callId)")
             return
         }
 

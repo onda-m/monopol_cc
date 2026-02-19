@@ -118,7 +118,8 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     /// SkyWay再接続中フラグ（多重発火防止）
     var isReconnecting: Bool = false
     /// 再接続リトライ回数（setupSkyWayReconnect内で使用）
-    private var reconnectRetryCount: Int = 0
+    /// WaitViewController+CommonSkyway.swift の extension から参照するため internal にする
+    var reconnectRetryCount: Int = 0
     var mediaConnection: SKWMediaConnection?
     //var localStream: SKWMediaStream?
 //    var remoteStream: SKWMediaStream?//重要
