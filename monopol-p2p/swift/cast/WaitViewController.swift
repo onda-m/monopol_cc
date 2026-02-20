@@ -109,6 +109,8 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     //var peer_temp: SKWPeer?//ダミー用
     /// SkyWay Peer が OPEN 状態かどうか（OnConnectionFailed/timeout 後は false）
     var isSkyWayReady: Bool = false
+    /// NewSDK P2PRoom が host 待機完了状態かどうか（承認ゲートの主条件）
+    var isNewSDKReadyForApproval: Bool = false
     /// SkyWay未準備時に受信したリクエストを保持（1件）
     var pendingRequest: (callId: String, cast_id: Int, user_id: Int, status: Int, user_name: String?, photo_flg: Int, photo_name: String?)?
     /// 承認ボタン押下後、SkyWay OPEN待ちかどうか
@@ -1672,6 +1674,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             print("[SKYWAY] commonWaitDo: peer is already nil, skipping disconnect/destroy")
         }
         self.isSkyWayReady = false
+        self.isNewSDKReadyForApproval = false
 
         //非表示
         self.userInfoDialog.isHidden = true
