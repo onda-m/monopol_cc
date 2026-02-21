@@ -1631,6 +1631,13 @@ class MediaConnectionViewController: UIViewController,UITextViewDelegate ,UITabB
             self.userPresentListDialog.isHidden = true
             //self.userPurchasePlanDialog.isHidden = true
             //キャスト情報の表示
+            if self.castInfoDialog.superview == nil {
+                print("[UI][INFO] lazy init castInfoDialog from NIB")
+                self.castInfoDialog = UINib(nibName: "OnLiveCastInfo", bundle: nil).instantiate(withOwner: self, options: nil)[0] as! OnLiveCastInfo
+                self.castInfoDialog.frame = self.view.frame
+                self.view.addSubview(self.castInfoDialog)
+                self.castInfoDialog.isHidden = true
+            }
             self.castInfoDialog.setValue()
             self.castInfoDialog.isHidden = false
             self.view.bringSubviewToFront(self.castInfoDialog)
