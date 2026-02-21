@@ -553,27 +553,23 @@ class CastSelectedDialog: UIView,UIGestureRecognizerDelegate {
                             let status = snap.value as! Int
                             
                             if(status == 99){
-                                //承認された(キャストと繋がりました!と1秒ほど表示)
+                                //承認された(キャストと繋がりました!と1秒ほど表示)
                                 self.conditionRef.removeObserver(withHandle: self.handle_status)
-
-                                // NewSDK: read room_name from full Firebase document
-                                self.conditionRef.observeSingleEvent(of: .value, with: { snap in
-                                    let roomName = snap.childSnapshot(forPath: "room_name").value as? String ?? ""
-                                    print("[NewSDK][LISTENER] status=99 received room_name=\(roomName) cast_id=\(cast_id) user_id=\(user_id)")
-
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                                        print("キャストと繋がりました!")
-                                        self.timerCount = 0
-                                        self.requestTimer.invalidate()
-
-                                        //20200606追加
-                                        //申請直後リスナーが落ちたときのストリーマーがロックされてしまう問題
-                                        UtilFunc.deleteCastLock(cast_id:cast_id, user_id:user_id, type:2)
-
-                                        UtilToViewController.toMediaConnectionViewController(roomName: roomName)
-                                    }
-                                })
-
+                               
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                    // 1.0秒後に実行したい処理
+                                    print("キャストと繋がりました!")
+                                    //print(self.appDelegate.request_count_num)
+                                    // タイマーを無効にする
+                                    self.timerCount = 0
+                                    self.requestTimer.invalidate()
+                                    
+                                    //20200606追加
+                                    //申請直後リスナーが落ちたときのストリーマーがロックされてしまう問題
+                                    UtilFunc.deleteCastLock(cast_id:cast_id, user_id:user_id, type:2)
+                                    
+                                    UtilToViewController.toMediaConnectionViewController()
+                                }
                                 //この時点で監視を解除すること
                                 self.conditionRef.child("status").removeObserver(withHandle: self.handle_status)
                             }

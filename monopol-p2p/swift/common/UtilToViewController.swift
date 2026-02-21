@@ -63,11 +63,8 @@ class UtilToViewController {
     
     
     // ライブ配信画面への遷移処理
-    // TODO: 本番は roomName を引数で受け取る形にする
-    //   static func toMediaConnectionViewController(roomName: String) { ... }
-    //   呼び出し元（キャスト一覧）で選択したキャストに紐づく roomName を渡す
-    //   現在は UserDefaults(skyway_peer_id) を暫定利用
-    static func toMediaConnectionViewController(){
+    // roomName priority: param(Firebase payload) > UserDefaults(skyway_peer_id) fallback
+    static func toMediaConnectionViewController(roomName: String = ""){
         UserDefaults.standard.set(1, forKey: "selectedStreamerAuto")//1:通常、2:自動応答のどれを選んでいるか。
         //let selectedStreamerAuto = UserDefaults.standard.integer(forKey: "selectedStreamerAuto")
 
@@ -75,15 +72,15 @@ class UtilToViewController {
         let storyboard = UIStoryboard(name: "Main", bundle: nil)
         let mediaConnectionView: MediaConnectionViewController = storyboard.instantiateViewController(withIdentifier: "toMediaConnectionViewController") as! MediaConnectionViewController
 
-        // 新SDK: キャスト一覧ボタン選択時に roomName をセット
-        // TODO: use stable castId as roomName (現在はキャストのpeerId=UUIDを暫定使用)
-        // 本番では引数 roomName を使用: mediaConnectionView.targetRoomName = roomName
-        let roomName = UserDefaults.standard.string(forKey: "skyway_peer_id") ?? ""
-        print("[NewSDK] selected roomName=\(roomName) (from UserDefaults skyway_peer_id)")
-        if roomName.isEmpty {
-            print("[NewSDK] WARN: roomName is empty. Cast must open Wait screen first to generate peerId.")
+        // 新SDK: roomName priority: param(Firebase payload) > UserDefaults fallback
+        let resolvedRoomName = roomName.isEmpty
+            ? (UserDefaults.standard.string(forKey: "skyway_peer_id") ?? "")
+            : roomName
+        print("[NewSDK] resolved roomName=\(resolvedRoomName) source=\(roomName.isEmpty ? "userDefaults_fallback" : "firebase_payload")")
+        if resolvedRoomName.isEmpty {
+            print("[NewSDK] WARN: roomName is empty after resolution.")
         }
-        mediaConnectionView.targetRoomName = roomName
+        mediaConnectionView.targetRoomName = resolvedRoomName
 
         // 下記を追加する
         mediaConnectionView.modalPresentationStyle = .fullScreen
@@ -93,9 +90,8 @@ class UtilToViewController {
     }
 
     // ライブ配信画面への遷移処理(自動応答ユーザー用)
-    // TODO: 本番は roomName を引数で受け取る形にする
-    //   static func toMediaConnectionViewControllerAuto(roomName: String) { ... }
-    static func toMediaConnectionViewControllerAuto(){
+    // roomName priority: param(Firebase payload) > UserDefaults(skyway_peer_id) fallback
+    static func toMediaConnectionViewControllerAuto(roomName: String = ""){
         UserDefaults.standard.set(2, forKey: "selectedStreamerAuto")//1:通常、2:自動応答のどれを選んでいるか。
         //let selectedStreamerAuto = UserDefaults.standard.integer(forKey: "selectedStreamerAuto")
 
@@ -103,15 +99,15 @@ class UtilToViewController {
         let storyboard = UIStoryboard(name: "Main", bundle: nil)
         let mediaConnectionView: MediaConnectionViewController = storyboard.instantiateViewController(withIdentifier: "toMediaConnectionViewController") as! MediaConnectionViewController
 
-        // 新SDK: キャスト一覧ボタン選択時に roomName をセット
-        // TODO: use stable castId as roomName (現在はキャストのpeerId=UUIDを暫定使用)
-        // 本番では引数 roomName を使用: mediaConnectionView.targetRoomName = roomName
-        let roomName = UserDefaults.standard.string(forKey: "skyway_peer_id") ?? ""
-        print("[NewSDK] selected roomName=\(roomName) (from UserDefaults skyway_peer_id)")
-        if roomName.isEmpty {
-            print("[NewSDK] WARN: roomName is empty. Cast must open Wait screen first to generate peerId.")
+        // 新SDK: roomName priority: param(Firebase payload) > UserDefaults fallback
+        let resolvedRoomName = roomName.isEmpty
+            ? (UserDefaults.standard.string(forKey: "skyway_peer_id") ?? "")
+            : roomName
+        print("[NewSDK] resolved roomName=\(resolvedRoomName) source=\(roomName.isEmpty ? "userDefaults_fallback" : "firebase_payload")")
+        if resolvedRoomName.isEmpty {
+            print("[NewSDK] WARN: roomName is empty after resolution.")
         }
-        mediaConnectionView.targetRoomName = roomName
+        mediaConnectionView.targetRoomName = resolvedRoomName
 
         // 下記を追加する
         mediaConnectionView.modalPresentationStyle = .fullScreen

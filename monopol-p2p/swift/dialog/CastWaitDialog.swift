@@ -438,13 +438,16 @@ class CastWaitDialog: UIView {
         let conditionRef = self.rootRef.child(Util.INIT_FIREBASE
             + "/"
             + String(self.user_id) + "/" + String(self.get_user_id))
-        let data = ["status": 99, "effect_id": self.appDelegate.live_effect_id]
-        print("[WAITREQ][APPROVAL] proceedWithApproval: Firebase update start status=99 user_id=\(self.user_id) get_user_id=\(self.get_user_id)")
+        // NewSDK: キャストの roomName(peerId)をFirebaseに書き込みリスナーに伝える
+        let castRoomName = SkywayManager.sharedManager().getPeerId()
+        print("[NewSDK][APPROVAL] proceedWithApproval: room_name=\(castRoomName) written to Firebase for listener")
+        let data: [String: Any] = ["status": 99, "effect_id": self.appDelegate.live_effect_id, "room_name": castRoomName]
+        print("[WAITREQ][APPROVAL] proceedWithApproval: Firebase update start status=99 user_id=\(self.user_id) get_user_id=\(self.get_user_id) room_name=\(castRoomName)")
         conditionRef.updateChildValues(data) { error, _ in
             if let e = error {
                 print("[WAITREQ][APPROVAL] proceedWithApproval: Firebase update ERROR \(e)")
             } else {
-                print("[WAITREQ][APPROVAL] proceedWithApproval: Firebase update OK status=99")
+                print("[WAITREQ][APPROVAL] proceedWithApproval: Firebase update OK status=99 room_name=\(castRoomName)")
             }
         }
 
