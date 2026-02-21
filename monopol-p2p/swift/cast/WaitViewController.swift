@@ -194,11 +194,9 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     @MainActor
     func setWaitState(_ newState: WaitState) {
         guard waitState != newState else { return }
+        print("[WaitState] \(waitState)→\(newState) thread=\(Thread.isMainThread ? "MT" : "BG") cast_id=\(user_id)")
         #if DEBUG
-        let caller = Thread.callStackSymbols.prefix(5).joined(separator: "\n  ")
-        print("[NewSDK] WaitState: \(waitState) -> \(newState)\n  \(caller)")
-        #else
-        print("[NewSDK] WaitState: \(waitState) -> \(newState)")
+        print("[WaitState][cs] \(Thread.callStackSymbols.prefix(5).joined(separator: " | "))")
         #endif
         waitState = newState
         updateUI(for: newState)
@@ -206,12 +204,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
 
     @MainActor
     private func updateUI(for state: WaitState) {
-        #if DEBUG
-        let caller = Thread.callStackSymbols.prefix(5).joined(separator: "\n  ")
-        print("[NewSDK][UI] updateUI state=\(state) statusLbl=\(Unmanaged.passUnretained(castWaitDialog.statusLbl).toOpaque())\n  \(caller)")
-        #else
-        print("[NewSDK][UI] updateUI state=\(state) statusLbl=\(Unmanaged.passUnretained(castWaitDialog.statusLbl).toOpaque())")
-        #endif
+        print("[UpdateUI] ENTER state=\(state) thread=\(Thread.isMainThread ? "MT" : "BG") cast_id=\(user_id)")
 
         // stopping 以外への遷移時は stopping 用の遅延処理をキャンセル
         if state != .stopping {

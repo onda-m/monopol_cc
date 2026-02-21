@@ -225,7 +225,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     ///   - delegate: コールバック受信用デリゲート
     public func connectStart(roomName: String, delegate: SkywaySessionDelegate) {
         logState("connectStart.begin")
-        print("[SkyMgr] connectStart called, roomName=\(roomName), myPeerId=\(peerId)")
+        print("[SkyMgr] connectStart thread=\(Thread.isMainThread ? "MT" : "BG") roomName=\(roomName) myPeerId=\(peerId)")
 
         // 離脱中ガード: leave 処理中は再待機を拒否
         if isLeaving {
@@ -320,7 +320,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             return
         }
         do {
-            print("[SkyMgr] joinRoomIfNeeded start, roomName=\(roomName), memberName=\(memberName)")
+            print("[SkyMgr] joinRoomIfNeeded START thread=\(Thread.isMainThread ? "MT" : "BG") roomName=\(roomName) memberName=\(memberName)")
             tokenRoomNameForContextSetup = roomName
             try await setupContextIfNeeded()
             let roomOptions = Room.InitOptions()
@@ -335,10 +335,10 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             print("[SkyMgr] room.join success, localMemberId=\(localMember.id), name=\(localMember.name ?? "nil")")
             attachRoomCallbacks(room: room, localMember: localMember)
             try await publishLocalStreams(localMember: localMember)
-            print("[SkyMgr] joinRoomIfNeeded complete, calling connectSucces")
+            print("[SkyMgr] joinRoomIfNeeded COMPLETE thread=\(Thread.isMainThread ? "MT" : "BG") calling connectSucces")
             sessionDelegate?.connectSucces()
         } catch {
-            print("[SkyMgr] joinRoomIfNeeded error: \(error)")
+            print("[SkyMgr] joinRoomIfNeeded ERROR thread=\(Thread.isMainThread ? "MT" : "BG") error=\(error)")
             isConnectStarted = false
             sessionDelegate?.connectError()
         }
@@ -602,14 +602,14 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         isLeaving = true
         defer { isLeaving = false }
 
-        print("[SkyMgr] leaveRoomIfNeeded start reason=\(reason)")
+        print("[SkyMgr] leaveRoomIfNeeded START thread=\(Thread.isMainThread ? "MT" : "BG") reason=\(reason)")
         logState("leaveRoomIfNeeded.begin")
         await detachRoomCallbacks(reason: reason)
         if setRoomClosed {
             roomClosed = true
             print("[SkyMgr] roomClosed set to true reason=\(reason)")
         }
-        print("[SkyMgr] leaveRoomIfNeeded complete reason=\(reason)")
+        print("[SkyMgr] leaveRoomIfNeeded END thread=\(Thread.isMainThread ? "MT" : "BG") reason=\(reason)")
     }
 
     @MainActor

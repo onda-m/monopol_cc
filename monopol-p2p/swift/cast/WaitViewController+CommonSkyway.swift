@@ -138,6 +138,7 @@ extension WaitViewController{
             return
         }
         isSessionClosing = true
+        print("[SESSION] sessionClose START thread=\(Thread.isMainThread ? "MT" : "BG") cast_id=\(user_id) isCancelWaitFlow=\(isCancelWaitFlow) isLiveConnectionStarted=\(isLiveConnectionStarted)")
 
         // 解除中: 配信UIを非表示にし操作を無効化
         Task { @MainActor in
@@ -152,12 +153,15 @@ extension WaitViewController{
             peer.on(.PEER_EVENT_CALL, callback: nil)
             peer.on(.PEER_EVENT_DISCONNECTED, callback: nil)
             peer.on(.PEER_EVENT_ERROR, callback: nil)
+            print("[SESSION] sessionClose: peer.destroy START thread=\(Thread.isMainThread ? "MT" : "BG")")
             peer.destroy()
+            print("[SESSION] sessionClose: peer.destroy END")
             self.peer = nil
         }
 
         // 新 SDK 後始末（room/member が nil でも安全、idempotent）
         // leaveRoomIfNeeded() はバックグラウンドで実行し、完了時のみ MainActor で通知
+        print("[SESSION] sessionClose: launching leaveRoomIfNeeded Task thread=\(Thread.isMainThread ? "MT" : "BG")")
         Task {
             await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "WaitVC.sessionClose")
             await MainActor.run {
@@ -349,11 +353,12 @@ extension WaitViewController {
         }
         isReconnecting = true
         // reconnectRetryCount はここでは0に戻さない（成功時 or 最終失敗時のみリセット）
-        print("[SKYWAY_RECONNECT] start reason=\(reason) isSkyWayReady=\(isSkyWayReady) peerNil=\(peer == nil) retryCount=\(reconnectRetryCount)")
+        print("[SKYWAY_RECONNECT] start reason=\(reason) isSkyWayReady=\(isSkyWayReady) peerNil=\(peer == nil) retryCount=\(reconnectRetryCount) thread=\(Thread.isMainThread ? "MT" : "BG") cast_id=\(user_id)")
 
         // 既存接続をクリーンアップ（nil安全）
         isSkyWayReady = false
         isNewSDKReadyForApproval = false
+        print("[SKYWAY_RECONNECT] cleanup: disconnect/destroy START thread=\(Thread.isMainThread ? "MT" : "BG")")
         dataConnection?.close()
         mediaConnection?.close()
         if let p = peer {
@@ -365,10 +370,12 @@ extension WaitViewController {
             }
             self.peer = nil
         }
+        print("[SKYWAY_RECONNECT] cleanup: disconnect/destroy END, calling setup()")
 
         // setup() で peer を作り直す
         setup()
         attemptReconnectTimeout(reason: reason)
+        print("[SKYWAY_RECONNECT] end: setup() called, timeout scheduled reason=\(reason) thread=\(Thread.isMainThread ? "MT" : "BG")")
     }
 
     /// 15秒タイムアウト監視。isSkyWayReady にならなければリトライ or 失敗通知。
@@ -424,13 +431,15 @@ extension WaitViewController{
             if let error = obj as? SKWPeerError{
                 // NewSDKモード: 旧SDK失敗を sessionClose/reconnect/待機解除に波及させない
                 if self.useNewSDK {
-                    print("[SKYWAY_ERR] PEER_EVENT_ERROR IGNORED(old sdk failure in new sdk mode): \(error)")
+                    let _errCallId = self.pendingRequest?.callId ?? "-"
+                    print("[SKYWAY_ERR] PEER_EVENT_ERROR IGNORED(old sdk failure in new sdk mode) thread=\(Thread.isMainThread ? "MT" : "BG") cast_id=\(self.user_id) callId=\(_errCallId) error=\(error)")
                     UtilFunc.deleteCastLock(cast_id:self.user_id, user_id:self.user_id, type:1)
                     UtilFunc.deleteCastLock(cast_id:self.user_id, user_id:0, type:2)
                     return
                 }
 
-                print("[SKYWAY_ERR] PEER_EVENT_ERROR: \(error) isSkyWayReady→false")
+                let _errCallId2 = self.pendingRequest?.callId ?? "-"
+                print("[SKYWAY_ERR] PEER_EVENT_ERROR thread=\(Thread.isMainThread ? "MT" : "BG") cast_id=\(self.user_id) callId=\(_errCallId2) isSkyWayReady→false error=\(error)")
                 self.isSkyWayReady = false
 
                 /******************************/
@@ -466,7 +475,8 @@ extension WaitViewController{
         peer.on(SKWPeerEventEnum.PEER_EVENT_OPEN,callback:{ (obj) -> Void in
             if let peerId = obj as? String{
                 self.isSkyWayReady = true
-                print("[SKYWAY] PEER_EVENT_OPEN: isSkyWayReady→true peerId=\(peerId)")
+                let _openCallId = self.pendingRequest?.callId ?? "-"
+                print("[SKYWAY] PEER_EVENT_OPEN thread=\(Thread.isMainThread ? "MT" : "BG") cast_id=\(self.user_id) get_user_id=\(self.castWaitDialog.get_user_id) callId=\(_openCallId) peerId=\(peerId) isSkyWayReady→true")
 
                 DispatchQueue.main.async {
                     //print("待機完了")
