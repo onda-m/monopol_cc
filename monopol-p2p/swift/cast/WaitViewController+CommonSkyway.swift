@@ -983,11 +983,14 @@ extension WaitViewController{
 
         // MARK: DATACONNECTION_EVENT_DATA
         //何かメッセージがきた時に呼ばれる
+        print("[CHAT][RECV] observer started peer=\(dataConnection.peer)")
         dataConnection.on(SKWDataConnectionEventEnum.DATACONNECTION_EVENT_DATA, callback: { (obj) -> Void in
+            print("[CHAT][RECV] DATACONNECTION_EVENT_DATA fired type=\(type(of: obj))")
             guard let strValue = obj as? String else {
                 print("[WAIT] DATACONNECTION_EVENT_DATA: obj is not String, type=\(type(of: obj)), value=\(String(describing: obj))")
                 return
             }
+            print("[CHAT][RECV] received peer=\(dataConnection.peer) len=\(strValue.count)")
             
             if(strValue.contains("画面リフレッシュ"))
             {
