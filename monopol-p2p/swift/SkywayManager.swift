@@ -633,7 +633,16 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     private func attachRemoteVideo() {
-        guard let remoteContainerView = remoteContainerView else { return }
+        guard let remoteContainerView = remoteContainerView else {
+            print("[SkyMgr] attachRemoteVideo: remoteContainerView=nil, skip")
+            return
+        }
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { self.attachRemoteVideo() }
+            return
+        }
+        remoteContainerView.layoutIfNeeded()
+        print("[SkyMgr] attachRemoteVideo: main=\(Thread.isMainThread) frame=\(remoteContainerView.frame) hidden=\(remoteContainerView.isHidden) alpha=\(remoteContainerView.alpha) superview=\(remoteContainerView.superview != nil) window=\(remoteContainerView.window != nil)")
         if remoteVideoView == nil {
             remoteVideoView = VideoView(frame: remoteContainerView.bounds)
             if let remoteVideoView = remoteVideoView {

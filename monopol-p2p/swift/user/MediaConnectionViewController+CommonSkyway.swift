@@ -1181,7 +1181,14 @@ extension MediaConnectionViewController {
 extension MediaConnectionViewController: SkywaySessionDelegate {
     func sessionStart() { print("[NewSDK] MediaConnectionViewController: sessionStart") }
     func connectSucces() { print("[NewSDK] MediaConnectionViewController: connectSucces") }
-    func remoteConnectSucces() { print("[NewSDK] MediaConnectionViewController: remoteConnectSucces") }
+    func remoteConnectSucces() {
+        print("[NewSDK] MediaConnectionViewController: remoteConnectSucces")
+        DispatchQueue.main.async {
+            self.remoteStreamView.layoutIfNeeded()
+            SkywayManager.sharedManager().setRemoteView(remoteView: self.remoteStreamView)
+        }
+        self.addAudioSessionObservers()
+    }
     func connectDisconnect() { print("[NewSDK] MediaConnectionViewController: connectDisconnect") }
     func connectEnd() { print("[NewSDK] MediaConnectionViewController: connectEnd") }
     func connectError() { print("[NewSDK] MediaConnectionViewController: connectError") }
