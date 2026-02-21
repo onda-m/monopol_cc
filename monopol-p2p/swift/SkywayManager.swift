@@ -252,7 +252,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
                 isConnectStarted = false
                 return
             }
-            await joinRoomIfNeeded(roomName: roomName, memberName: peerId)
+            let memberName = peerId.isEmpty ? String(UserDefaults.standard.integer(forKey: "user_id")) : peerId
+            await joinRoomIfNeeded(roomName: roomName, memberName: memberName)
         }
     }
 
