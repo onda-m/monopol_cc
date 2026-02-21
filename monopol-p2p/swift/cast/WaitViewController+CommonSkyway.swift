@@ -422,6 +422,14 @@ extension WaitViewController{
         //待機がエラーとなった時に呼ばれる(???)
         peer.on(SKWPeerEventEnum.PEER_EVENT_ERROR, callback:{ (obj) -> Void in
             if let error = obj as? SKWPeerError{
+                // NewSDKモード: 旧SDK失敗を sessionClose/reconnect/待機解除に波及させない
+                if self.useNewSDK {
+                    print("[SKYWAY_ERR] PEER_EVENT_ERROR IGNORED(old sdk failure in new sdk mode): \(error)")
+                    UtilFunc.deleteCastLock(cast_id:self.user_id, user_id:self.user_id, type:1)
+                    UtilFunc.deleteCastLock(cast_id:self.user_id, user_id:0, type:2)
+                    return
+                }
+
                 print("[SKYWAY_ERR] PEER_EVENT_ERROR: \(error) isSkyWayReady→false")
                 self.isSkyWayReady = false
 
@@ -434,7 +442,7 @@ extension WaitViewController{
                 /******************************/
                 //アンロック(ここまで)
                 /******************************/
-                
+
                 //20200606追加
                 //申請直後リスナーが落ちたときのストリーマーがロックされてしまう問題
                 UtilFunc.deleteCastLock(cast_id:self.user_id, user_id:0, type:2)
@@ -1137,16 +1145,27 @@ extension WaitViewController: SkywaySessionDelegate {
         SkywayManager.sharedManager().connectStart(roomName: roomName, delegate: self)
     }
     func connectSucces() {
-        print("[NewSDK] WaitViewController: connectSucces - 待機完了 isNewSDKReadyForApproval→true isSkyWayReady=\(isSkyWayReady)")
+        print("[NewSDK] WaitViewController: connectSucces - 待機完了 isNewSDKReadyForApproval→true isSkyWayReady=\(isSkyWayReady) isPendingApproval=\(isPendingApproval)")
         isNewSDKReadyForApproval = true
         Task { @MainActor in
             self.setWaitState(.waiting)
-            if self.isPendingApproval, self.isSkyWayReady, let completion = self.pendingApprovalCompletion {
+            if self.isPendingApproval, let completion = self.pendingApprovalCompletion {
                 let callId = self.pendingRequest?.callId ?? "unknown"
-                print("[SKYWAY][APPROVAL] connectSucces: both ready, resuming pending approval callId=\(callId) isSkyWayReady=true")
-                self.isPendingApproval = false
-                self.pendingApprovalCompletion = nil
-                DispatchQueue.main.async { completion() }
+                if self.useNewSDK {
+                    // NewSDKモード: isSkyWayReady を条件にせず即時復帰
+                    print("[SKYWAY][APPROVAL] connectSucces: NewSDK ready, resuming pending approval callId=\(callId) isSkyWayReady=\(self.isSkyWayReady) (isSkyWayReady ignored in NewSDK mode)")
+                    self.isPendingApproval = false
+                    self.pendingApprovalCompletion = nil
+                    DispatchQueue.main.async { completion() }
+                } else if self.isSkyWayReady {
+                    // 旧SDKモード: 従来通り両方 ready が条件
+                    print("[SKYWAY][APPROVAL] connectSucces: both ready, resuming pending approval callId=\(callId) isSkyWayReady=true")
+                    self.isPendingApproval = false
+                    self.pendingApprovalCompletion = nil
+                    DispatchQueue.main.async { completion() }
+                } else {
+                    print("[SKYWAY][APPROVAL] connectSucces: waiting for old SDK (isSkyWayReady=false) callId=\(callId)")
+                }
             }
         }
     }
@@ -1263,6 +1282,12 @@ extension WaitViewController: CastWaitDialogDelegate {
         // isReconnecting 中なら再接続は開始しない（OPEN待ちに任せる）
         if isReconnecting {
             print("[SKYWAY][APPROVAL] castWaitDialogNeedsSkyWayReady: RECONNECT_IN_PROGRESS callId=\(callId)")
+            return
+        }
+
+        // NewSDKモード: 旧SDK reconnect は不要（connectSucces() 待ちに任せる）
+        if useNewSDK {
+            print("[SKYWAY][APPROVAL] castWaitDialogNeedsSkyWayReady: SKIPPED setupSkyWayReconnect (NewSDK mode) callId=\(callId)")
             return
         }
 

@@ -166,7 +166,8 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     var user_id:Int=0//自分のユーザーID
 
     // Phase2-2: 新SDK切替フラグ
-    private let useNewSDK = true
+    // Note: extension (別ファイル) からアクセスするため internal スコープ
+    let useNewSDK = true
     // 新SDK: startConnection() 多重実行防止フラグ
     // Note: extension (別ファイル) からアクセスするため internal スコープ
     var isLiveConnectionStarted = false
@@ -1516,12 +1517,17 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
                             }
                         }
                     } else {
-                        // SkyWay未準備 → ダイアログは表示するが、承認時にSkyWay再接続が必要
-                        print("[WAITREQ][\(callId)] isSkyWayReady=false, showing dialog anyway, triggering reconnect")
+                        // SkyWay未準備 → ダイアログは表示。NewSDKモードでは旧SDK reconnect をスキップ
+                        let peerNilStr = self.peer == nil ? "nil" : "exists"
+                        print("[WAITREQ][\(callId)] isSkyWayReady=false useNewSDK=\(self.useNewSDK) isNewSDKReadyForApproval=\(self.isNewSDKReadyForApproval) peerNil=\(peerNilStr) reconnect=\(!self.useNewSDK)")
                         DispatchQueue.main.async {
                             self.castWaitDialog.requestDialogDo()
                         }
-                        self.setupSkyWayReconnect(reason: "request_received_while_not_ready")
+                        if self.useNewSDK {
+                            print("[WAITREQ][\(callId)] SKIPPED setupSkyWayReconnect (NewSDK mode, isNewSDKReadyForApproval=\(self.isNewSDKReadyForApproval))")
+                        } else {
+                            self.setupSkyWayReconnect(reason: "request_received_while_not_ready")
+                        }
                     }
                 }
             }
