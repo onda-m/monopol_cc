@@ -1089,10 +1089,12 @@ extension MediaConnectionViewController{
         if(text.contains("画面リフレッシュ"))
         {
             isReconnect = true
+            print("[CHAT][SEND] 画面リフレッシュ from=\(self.user_id) toCast=\(self.liveCastId) room=\(self.targetRoomName) dcNil=\(self.dataConnection == nil) textLen=\(text.count)")
             self.dataConnection?.send(text as NSObject)
         } else if(!text.hasPrefix("$$$") && text != "") {
             //print("送信した文字列")
             //print(text)
+            print("[CHAT][SEND] from=\(self.user_id) toCast=\(self.liveCastId) room=\(self.targetRoomName) dcNil=\(self.dataConnection == nil) textLen=\(text.count)")
             self.dataConnection?.send(text as NSObject)
             let message = Message(sender: Message.SenderType.send, text: text)
             //print(message.text as Any)
@@ -1189,7 +1191,7 @@ extension MediaConnectionViewController: SkywaySessionDelegate {
         }
         self.addAudioSessionObservers()
     }
-    func connectDisconnect() { print("[NewSDK] MediaConnectionViewController: connectDisconnect") }
-    func connectEnd() { print("[NewSDK] MediaConnectionViewController: connectEnd") }
-    func connectError() { print("[NewSDK] MediaConnectionViewController: connectError") }
+    func connectDisconnect() { print("[NewSDK] MediaConnectionViewController: connectDisconnect room=\(self.targetRoomName) cast=\(self.liveCastId) user=\(self.user_id)") }
+    func connectEnd() { print("[NewSDK] MediaConnectionViewController: connectEnd room=\(self.targetRoomName) cast=\(self.liveCastId) user=\(self.user_id)") }
+    func connectError() { print("[NewSDK] MediaConnectionViewController: connectError room=\(self.targetRoomName) cast=\(self.liveCastId) user=\(self.user_id)") }
 }
