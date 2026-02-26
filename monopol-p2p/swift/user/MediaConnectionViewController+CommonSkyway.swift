@@ -1090,12 +1090,22 @@ extension MediaConnectionViewController{
         {
             isReconnect = true
             print("[CHAT][SEND] 画面リフレッシュ from=\(self.user_id) toCast=\(self.liveCastId) room=\(self.targetRoomName) dcNil=\(self.dataConnection == nil) textLen=\(text.count)")
-            self.dataConnection?.send(text as NSObject)
+            if useNewSDK {
+                print("[CHAT][NEWSDK][SEND] from=\(self.user_id) toCast=\(self.liveCastId) room=\(self.targetRoomName) len=\(text.count) ok=dispatch")
+                SkywayManager.sharedManager().sendChat(text: text)
+            } else {
+                self.dataConnection?.send(text as NSObject)
+            }
         } else if(!text.hasPrefix("$$$") && text != "") {
             //print("送信した文字列")
             //print(text)
             print("[CHAT][SEND] from=\(self.user_id) toCast=\(self.liveCastId) room=\(self.targetRoomName) dcNil=\(self.dataConnection == nil) textLen=\(text.count)")
-            self.dataConnection?.send(text as NSObject)
+            if useNewSDK {
+                print("[CHAT][NEWSDK][SEND] from=\(self.user_id) toCast=\(self.liveCastId) room=\(self.targetRoomName) len=\(text.count) ok=dispatch")
+                SkywayManager.sharedManager().sendChat(text: text)
+            } else {
+                self.dataConnection?.send(text as NSObject)
+            }
             let message = Message(sender: Message.SenderType.send, text: text)
             //print(message.text as Any)
             //self.messages.insert(message, at: 0)

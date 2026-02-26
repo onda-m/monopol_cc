@@ -22,7 +22,7 @@ protocol SkywaySessionDelegate: AnyObject {
     func connectError()
 }
 
-class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublicationDelegate, RoomSubscriptionDelegate {
+class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublicationDelegate, RoomSubscriptionDelegate, RemoteDataStreamDelegate {
 
     private var room: Room?
     private var localMember: LocalRoomMember?
@@ -50,6 +50,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     private var isConnectStarted: Bool = false
     private var isLeaving: Bool = false
     private weak var sessionDelegate: SkywaySessionDelegate?
+    /// NewSDK チャット受信時に呼ばれるクロージャ（WaitViewController が登録）
+    var onChatReceived: ((String) -> Void)?
     private var subscribedPublicationIds: Set<String> = []
     //private var roomType: RoomType = .P2P
 
@@ -312,6 +314,22 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         attachRemoteVideo()
     }
 
+    /// NewSDK 経由でテキストを送信する（localDataStream が publish 済みであること）
+    func sendChat(text: String) {
+        Task { @MainActor in
+            guard let stream = self.localDataStream else {
+                print("[CHAT][NEWSDK][SEND] SKIP localDataStream=nil text=\(String(text.prefix(20)))")
+                return
+            }
+            do {
+                try await stream.write(text)
+                print("[CHAT][NEWSDK][SEND] result=ok len=\(text.count) textHead=\(String(text.prefix(30)))")
+            } catch {
+                print("[CHAT][NEWSDK][SEND] result=error len=\(text.count) error=\(error)")
+            }
+        }
+    }
+
     @MainActor
     private func joinRoomIfNeeded(roomName: String, memberName: String) async {
         logState("joinRoomIfNeeded.begin")
@@ -453,6 +471,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         detachRemoteVideo()
         remoteVideoStream = nil
         remoteAudioStream = nil
+        remoteDataStream?.delegate = nil
         remoteDataStream = nil
         print("[SkyMgr] remote streams cleared")
 
@@ -503,8 +522,13 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             roomPublications[pub.id] = pub
             print("[SkyMgr][publish] video ok pubId=\(pub.id)")
         }
+        if let localDataStream = localDataStream {
+            let pub = try await localMember.publish(localDataStream, options: RoomPublicationOptions())
+            pub.delegate = self
+            roomPublications[pub.id] = pub
+            print("[CHAT][NEWSDK] localDataStream published pubId=\(pub.id)")
+        }
         print("[SkyMgr][publish] complete total=\(roomPublications.count)")
-        // Data stream deferred for MVP
     }
 
     @MainActor
@@ -589,8 +613,11 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         } else if let audioStream = stream as? RemoteAudioStream {
             print("[SkyMgr] handleStreamAttachment: attaching remote audio, subId=\(subscription.id)")
             remoteAudioStream = audioStream
+        } else if let dataStream = stream as? RemoteDataStream {
+            print("[CHAT][NEWSDK] handleStreamAttachment: attaching remote data, subId=\(subscription.id)")
+            remoteDataStream = dataStream
+            dataStream.delegate = self
         }
-        // Data stream deferred for MVP
     }
 
     @MainActor
@@ -847,6 +874,15 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
                 publication.delegate = nil
                 self.roomPublications.removeValue(forKey: publication.id)
             }
+        }
+    }
+
+    // MARK: - RemoteDataStreamDelegate
+
+    func dataStream(_ dataStream: RemoteDataStream, didReceive string: String) {
+        Task { @MainActor in
+            print("[CHAT][NEWSDK][RECV] len=\(string.count) textHead=\(String(string.prefix(30)))")
+            self.onChatReceived?(string)
         }
     }
 }

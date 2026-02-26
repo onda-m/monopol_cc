@@ -1120,6 +1120,13 @@ extension WaitViewController {
         Task { @MainActor in
             self.setWaitState(.stopping)
         }
+        // NewSDK チャット受信登録
+        SkywayManager.sharedManager().onChatReceived = { [weak self] text in
+            DispatchQueue.main.async {
+                self?.handleIncomingChat(text: text)
+            }
+        }
+        print("[CHAT][NEWSDK] onChatReceived registered in startWaitingUsingNewSDK")
         print("[NewSDK][MVP] calling SkywayManager.setWaitLocal")
         SkywayManager.sharedManager().setWaitLocal(localView: self.localStreamView, delegate: self)
         print("[NewSDK][MVP] calling SkywayManager.setRemoteView")
@@ -1136,6 +1143,35 @@ extension WaitViewController {
     func sessionCloseUsingNewSDK() {
         // TODO (Phase2-2): SkywayManager 経由でセッション終了へ接続する
         print("[NewSDK][Phase1] sessionCloseUsingNewSDK called")
+    }
+
+    /// NewSDK 経由で受信したチャットテキストを処理する（旧 DATACONNECTION_EVENT_DATA と同等）
+    /// - メインスレッドから呼ぶこと
+    func handleIncomingChat(text: String) {
+        print("[CHAT][NEWSDK][RECV] peer=NewSDK len=\(text.count) textHead=\(String(text.prefix(30)))")
+        if text.contains("画面リフレッシュ") {
+            isReconnect = true
+            castSelectedDialog.infoLbl.frame = CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: 0)
+            castSelectedDialog.infoLbl.attributedText = UtilFunc.getInsertIconString(
+                string: "画面をリフレッシュしています。", iconImage: UIImage(), iconSize: iconSize, lineHeight: 1.5)
+            castSelectedDialog.infoLbl.font = UIFont.boldSystemFont(ofSize: 15)
+            castSelectedDialog.infoLbl.sizeToFit()
+            castSelectedDialog.infoLbl.center = castSelectedDialog.center
+            castSelectedDialog.infoLbl.isHidden = false
+            castSelectedDialog.bringSubviewToFront(castSelectedDialog.infoLbl)
+            castSelectedDialog.closeBtn.isHidden = true
+            castSelectedDialog.isHidden = false
+            appDelegate.window!.bringSubviewToFront(castSelectedDialog)
+            return
+        }
+        let message = Message(sender: Message.SenderType.get, text: text)
+        messages.insert(message, at: messages.count)
+        castWaitDialog.messageTableView.reloadData()
+        if text.hasPrefix("$$$_nocoin_") {
+            castWaitDialog.messageTableView.isHidden = false
+            liveTimelineFlg = 1
+            timelineBtn.image = UIImage(named: "lm_ico_on")!.withRenderingMode(UIImage.RenderingMode.alwaysOriginal)
+        }
     }
 }
 
