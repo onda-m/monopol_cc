@@ -1105,6 +1105,7 @@ extension MediaConnectionViewController{
             print("[CHAT][SEND] 画面リフレッシュ from=\(self.user_id) toCast=\(self.liveCastId) room=\(self.targetRoomName) dcNil=\(self.dataConnection == nil) textLen=\(text.count)")
             if useNewSDK {
                 print("[CHAT][NEWSDK][SEND] from=\(self.user_id) toCast=\(self.liveCastId) room=\(self.targetRoomName) len=\(text.count) ok=dispatch")
+                print("[CHAT][NEWSDK][SEND][RAW]", newSDKChatPayload(text).prefix(120))
                 SkywayManager.sharedManager().sendChat(text: newSDKChatPayload(text))
             } else {
                 self.dataConnection?.send(text as NSObject)
@@ -1115,6 +1116,7 @@ extension MediaConnectionViewController{
             print("[CHAT][SEND] from=\(self.user_id) toCast=\(self.liveCastId) room=\(self.targetRoomName) dcNil=\(self.dataConnection == nil) textLen=\(text.count)")
             if useNewSDK {
                 print("[CHAT][NEWSDK][SEND] from=\(self.user_id) toCast=\(self.liveCastId) room=\(self.targetRoomName) len=\(text.count) ok=dispatch")
+                print("[CHAT][NEWSDK][SEND][RAW]", newSDKChatPayload(text).prefix(120))
                 SkywayManager.sharedManager().sendChat(text: newSDKChatPayload(text))
             } else {
                 self.dataConnection?.send(text as NSObject)
