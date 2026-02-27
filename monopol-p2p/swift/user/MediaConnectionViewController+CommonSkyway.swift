@@ -1080,6 +1080,19 @@ extension MediaConnectionViewController{
         UtilFunc.saveChatRireki(type:1, from_user_id:0, to_user_id:self.user_id, present_id:0, chat_text:text, status:1)
     }
     
+    private func newSDKChatPayload(_ text: String) -> String {
+        var meta: [String: Any] = [
+            "type": "chat",
+            "text": text,
+            "user_id": self.user_id,
+            "user_photo_name": self.my_photo_name,
+            "user_photo_flg": self.my_photo_flg
+        ]
+        if !self.strUserName.isEmpty { meta["user_name"] = self.strUserName }
+        return (try? JSONSerialization.data(withJSONObject: meta))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? text
+    }
+
     func send(text: String) {
         //$$$から始まる文字列はスタンプとする
         //guard let text = self.messageTextField.text else{
@@ -1092,7 +1105,7 @@ extension MediaConnectionViewController{
             print("[CHAT][SEND] 画面リフレッシュ from=\(self.user_id) toCast=\(self.liveCastId) room=\(self.targetRoomName) dcNil=\(self.dataConnection == nil) textLen=\(text.count)")
             if useNewSDK {
                 print("[CHAT][NEWSDK][SEND] from=\(self.user_id) toCast=\(self.liveCastId) room=\(self.targetRoomName) len=\(text.count) ok=dispatch")
-                SkywayManager.sharedManager().sendChat(text: text)
+                SkywayManager.sharedManager().sendChat(text: newSDKChatPayload(text))
             } else {
                 self.dataConnection?.send(text as NSObject)
             }
@@ -1102,7 +1115,7 @@ extension MediaConnectionViewController{
             print("[CHAT][SEND] from=\(self.user_id) toCast=\(self.liveCastId) room=\(self.targetRoomName) dcNil=\(self.dataConnection == nil) textLen=\(text.count)")
             if useNewSDK {
                 print("[CHAT][NEWSDK][SEND] from=\(self.user_id) toCast=\(self.liveCastId) room=\(self.targetRoomName) len=\(text.count) ok=dispatch")
-                SkywayManager.sharedManager().sendChat(text: text)
+                SkywayManager.sharedManager().sendChat(text: newSDKChatPayload(text))
             } else {
                 self.dataConnection?.send(text as NSObject)
             }

@@ -52,6 +52,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     private weak var sessionDelegate: SkywaySessionDelegate?
     /// NewSDK チャット受信時に呼ばれるクロージャ（WaitViewController が登録）
     var onChatReceived: ((String) -> Void)?
+    /// NewSDK チャット受信時にメタ情報付きで呼ばれるクロージャ（text, jsonDict）
+    var onChatReceivedMeta: ((String, [String: Any]) -> Void)?
     private var subscribedPublicationIds: Set<String> = []
     //private var roomType: RoomType = .P2P
 
@@ -883,7 +885,15 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         Task { @MainActor in
             print("[CHAT][NEWSDK][RECV][RAW]", string)
             print("[CHAT][NEWSDK][RECV] len=\(string.count) textHead=\(String(string.prefix(30)))")
-            self.onChatReceived?(string)
+            if let data = string.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               json["type"] as? String == "chat",
+               let text = json["text"] as? String {
+                self.onChatReceivedMeta?(text, json)
+                self.onChatReceived?(text)
+            } else {
+                self.onChatReceived?(string)
+            }
         }
     }
 }
