@@ -240,6 +240,7 @@
 		BF6AF47C26D471DB006CFE5E /* CreateEventViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF6AF47B26D471DB006CFE5E /* CreateEventViewController.swift */; };
 		BF6AF47E26D47808006CFE5E /* CreateEventCheckViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF6AF47D26D47808006CFE5E /* CreateEventCheckViewController.swift */; };
 		BF6AF49F26DD8BF8006CFE5E /* StreamerInfo.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = BF6AF49E26DD8BF8006CFE5E /* StreamerInfo.storyboard */; };
+		BFBF489F2F5204E8004A7103 /* HTTPDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFBF489E2F5204E8004A7103 /* HTTPDiagnostics.swift */; };
 		BFC2FE772F23B89B009238C9 /* SkywayManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2FE762F23B89B009238C9 /* SkywayManager.swift */; };
 		BFC95CCA26E1DF9A00A413E6 /* MyEventCheckViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC95CC926E1DF9A00A413E6 /* MyEventCheckViewController.swift */; };
 /* End PBXBuildFile section */
@@ -506,6 +507,7 @@
 		BF6AF47B26D471DB006CFE5E /* CreateEventViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateEventViewController.swift; sourceTree = "<group>"; };
 		BF6AF47D26D47808006CFE5E /* CreateEventCheckViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateEventCheckViewController.swift; sourceTree = "<group>"; };
 		BF6AF49E26DD8BF8006CFE5E /* StreamerInfo.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = StreamerInfo.storyboard; sourceTree = "<group>"; };
+		BFBF489E2F5204E8004A7103 /* HTTPDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPDiagnostics.swift; sourceTree = "<group>"; };
 		BFC2FE762F23B89B009238C9 /* SkywayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SkywayManager.swift; path = swift/SkywayManager.swift; sourceTree = "<group>"; };
 		BFC95CC926E1DF9A00A413E6 /* MyEventCheckViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyEventCheckViewController.swift; sourceTree = "<group>"; };
 		E8C83DA7BB5AD47D02EBF56D /* Pods-swift_skyway.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-swift_skyway.debug.xcconfig"; path = "Target Support Files/Pods-swift_skyway/Pods-swift_skyway.debug.xcconfig"; sourceTree = "<group>"; };
@@ -669,6 +671,7 @@
 		A314DED220C770B000FDEA42 /* common */ = {
 			isa = PBXGroup;
 			children = (
+				BFBF489E2F5204E8004A7103 /* HTTPDiagnostics.swift */,
 				A314DECE20C75D1500FDEA42 /* PlaceHolderTextView.swift */,
 				A3E29BBD20AA173B00AA1F80 /* EnhancedCircleImageView.swift */,
 				A360E18F20BC0B44003B3E0A /* AutoShrinkLabel.swift */,
@@ -1237,6 +1240,7 @@
 				A341754020C3120300D4B17F /* MypageViewController.swift in Sources */,
 				A30FE26020E2BA6900BC2B86 /* ProfileSettingViewController.swift in Sources */,
 				A3E65178209FAACB000E72F2 /* WaitTopViewController.swift in Sources */,
+				BFBF489F2F5204E8004A7103 /* HTTPDiagnostics.swift in Sources */,
 				A3DE2BA420B2C14A00C3315F /* EndCallDialog.swift in Sources */,
 				A3AD5F6A20F51F540042DD05 /* CastSelectViewController3.swift in Sources */,
 				A3E39FE9212762BD00F8B24A /* BlackListViewController.swift in Sources */,
@@ -1490,7 +1494,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "ef11874c-629e-4181-94bf-7e0e9de3ae9e";
 				PROVISIONING_PROFILE_SPECIFIER = devProfile20230313;
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = devProfile20250223;
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = devProfile20260224;
 				SWIFT_OBJC_BRIDGING_HEADER = "swift_skyway-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 4.2;
@@ -1535,7 +1539,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "ef11874c-629e-4181-94bf-7e0e9de3ae9e";
 				PROVISIONING_PROFILE_SPECIFIER = distProfile20230313;
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = distProfile20250223;
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = distProfile20260224;
 				SWIFT_OBJC_BRIDGING_HEADER = "swift_skyway-Bridging-Header.h";
 				SWIFT_VERSION = 4.2;
 				TARGETED_DEVICE_FAMILY = 1;
