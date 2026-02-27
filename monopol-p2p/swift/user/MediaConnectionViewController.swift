@@ -250,7 +250,7 @@ class MediaConnectionViewController: UIViewController,UITextViewDelegate ,UITabB
     var liveCastId:String = ""//キャストのユーザーID
 
     // Phase2-4b: 新SDK切替フラグ
-    private let useNewSDK = true
+    let useNewSDK = true
     // 新SDK: 参加する部屋名（キャスト一覧ボタン選択時にセットされる）
     // TODO: use stable castId as roomName (現在はキャストのpeerId=UUIDを暫定使用)
     var targetRoomName: String = ""
