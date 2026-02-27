@@ -1126,6 +1126,14 @@ extension WaitViewController {
                 self?.handleIncomingChat(text: text)
             }
         }
+        SkywayManager.sharedManager().onChatReceivedMeta = { [weak self] _, meta in
+            guard let self = self else { return }
+            if let v = meta["user_id"] as? Int        { self.strUserId    = String(v) }
+            if let v = meta["user_photo_flg"] as? Int { self.strPhotoFlg  = String(v) }
+            if let v = meta["user_photo_name"] as? String { self.strPhotoName = v }
+            if let v = meta["user_name"] as? String, !v.isEmpty { self.strUserName = v }
+            print("[CHAT][NEWSDK][META] userId=\(self.strUserId) photoFlg=\(self.strPhotoFlg) photoName=\(self.strPhotoName)")
+        }
         print("[CHAT][NEWSDK] onChatReceived registered in startWaitingUsingNewSDK")
         print("[NewSDK][MVP] calling SkywayManager.setWaitLocal")
         SkywayManager.sharedManager().setWaitLocal(localView: self.localStreamView, delegate: self)
