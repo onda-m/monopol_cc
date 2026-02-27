@@ -1078,12 +1078,20 @@ class MediaConnectionViewController: UIViewController,UITextViewDelegate ,UITabB
             //何もしない
         }else{
             //ライブ配信終了へ
-            //self.mediaConnection?.close()
-            //self.dataConnection?.close()
-            //self.peer?.disconnect()
-            //self.peer?.destroy()
-            self.closeMedia()
-            self.sessionClose()
+            if useNewSDK {
+                print("[END][NEWSDK] closeMedia start")
+                SkywayManager.sharedManager().closeMedia(localView: self.localStreamView, remoteView: self.remoteStreamView)
+                print("[END][NEWSDK] closeMedia done / sessionClose start")
+                SkywayManager.sharedManager().sessionClose()
+                print("[END][NEWSDK] sessionClose dispatched")
+            } else {
+                //self.mediaConnection?.close()
+                //self.dataConnection?.close()
+                //self.peer?.disconnect()
+                //self.peer?.destroy()
+                self.closeMedia()
+                self.sessionClose()
+            }
         }
     }
     
@@ -1356,6 +1364,7 @@ class MediaConnectionViewController: UIViewController,UITextViewDelegate ,UITabB
     }
 
     @IBAction func tapEndCall(){
+        print("[END][TAP] useNewSDK=\(useNewSDK)")
         print("end call")
         self.closeAlert()
     }
