@@ -886,7 +886,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             print("[CHAT][NEWSDK][RECV][RAW]", string)
             print("[CHAT][NEWSDK][RECV] len=\(string.count) textHead=\(String(string.prefix(30)))")
             if let data = string.data(using: .utf8),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let obj = try? JSONSerialization.jsonObject(with: data),
+               let json = obj as? [String: Any],
                json["type"] as? String == "chat",
                let text = json["text"] as? String {
                 self.onChatReceivedMeta?(text, json)
