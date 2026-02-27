@@ -881,6 +881,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     func dataStream(_ dataStream: RemoteDataStream, didReceive string: String) {
         Task { @MainActor in
+            print("[CHAT][NEWSDK][RECV][RAW]", string)
             print("[CHAT][NEWSDK][RECV] len=\(string.count) textHead=\(String(string.prefix(30)))")
             self.onChatReceived?(string)
         }
