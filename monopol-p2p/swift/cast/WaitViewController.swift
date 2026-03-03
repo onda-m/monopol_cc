@@ -1639,6 +1639,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     //statusには１(予約なし)か８(予約あり)が入る
     //予約は廃止
     func commonWaitDo(status:Int){
+        print("[WAIT][commonWaitDo] useNewSDK=\(useNewSDK) status=\(status)")
         //待機状態へ
         //くるくる表示開始
         if(self.busyIndicator.isDescendant(of: self.view)){
