@@ -13,6 +13,7 @@ import AVFoundation
 extension WaitViewController{
 
     func startConnection() {
+        print("[WAITREQ][RECV] entering function=startConnection useNewSDK=\(useNewSDK)")
         print("[WAITREQ][TIMER] startConnection: called timerIsValid=\(castWaitDialog.requestTimer.isValid) timerCount=\(castWaitDialog.timerCount) requestWaitFlg=\(castWaitDialog.requestWaitFlg)")
         //（一時的異常状態に）初期化する
         self.listenerErrorFlg = 0
