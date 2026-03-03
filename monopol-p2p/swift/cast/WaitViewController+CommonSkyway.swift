@@ -825,6 +825,14 @@ extension WaitViewController{
                             return
                         }
                         
+                        if self.useNewSDK, status_listener == 3 {
+                            Task { @MainActor in
+                                await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "firebase.status_listener==3")
+                                self.startWaitingUsingNewSDK()
+                            }
+                            return
+                        }
+
                         if(status_listener == 3 || status_listener == 4){
                             //リスナーがバツボタンを押して終わった(またはリスナーのコインがなくなった場合)
                             //self.commonWaitDo()
