@@ -624,6 +624,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     @MainActor
     func leaveRoomIfNeeded(reason: String, setRoomClosed: Bool = true) async {
+        print("[NEWSDK][LEAVE] leaveRoomIfNeeded reason=\(reason)")
+        print("[NEWSDK][LEAVE] room=\(String(describing: room)) localMember=\(String(describing: localMember))")
         // 二重実行防止
         guard !isLeaving else {
             print("[SkyMgr] leaveRoomIfNeeded skipped: already leaving")
