@@ -1728,7 +1728,14 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
         }
 
         //skywayの待機処理
-        self.setup()
+        if useNewSDK {
+            Task {
+                await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "commonWaitDo.listenerEnded")
+                self.startWaitingUsingNewSDK()
+            }
+        } else {
+            self.setup()
+        }
         //くるくる表示終了
         self.busyIndicator.removeFromSuperview()
         
