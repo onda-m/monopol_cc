@@ -1433,7 +1433,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
 
             if(snap.exists() == false){
                 //UtilLog.printf(str:"すでにデータがない(ストリーマー側)")
-                
+
                 //全て非表示
                 self.castWaitDialog.allCoverMessage.isHidden = true
                 self.castWaitDialog.allCoverRequest.isHidden = true
@@ -1441,7 +1441,21 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
 
                 return
             }
-            
+
+            if let outer = snap.value as? [String: Any],
+               let inner = outer.values.first as? [String: Any] {
+                let status_listener = inner["status_listener"] as? Int ?? 0
+                print("[WAITREQ][CHECK] useNewSDK=\(self.useNewSDK) status_listener=\(status_listener)")
+                if self.useNewSDK && status_listener == 3 {
+                    print("[WAITREQ][DEBUG] entering LEAVE branch")
+                    Task { @MainActor in
+                        print("[WAITREQ][DEBUG] calling leaveRoomIfNeeded")
+                        await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "firebase.status_listener==3")
+                    }
+                    return
+                }
+            }
+
             for item in (snap.children) {
                 // --- callId: このリクエスト処理単位を追跡するID ---
                 let callId = String(UUID().uuidString.prefix(6))
