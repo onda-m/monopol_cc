@@ -1447,10 +1447,10 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
                 let status_listener = inner["status_listener"] as? Int ?? 0
                 print("[WAITREQ][CHECK] useNewSDK=\(self.useNewSDK) status_listener=\(status_listener)")
                 if self.useNewSDK && status_listener == 3 {
-                    print("[WAITREQ][DEBUG] entering LEAVE branch")
-                    Task { @MainActor in
-                        print("[WAITREQ][DEBUG] calling leaveRoomIfNeeded")
-                        await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "firebase.status_listener==3")
+                    print("[WAITREQ][DEBUG] entering LEAVE branch status_listener=\(status_listener)")
+                    DispatchQueue.main.async {
+                        print("[WAITREQ][DEBUG] calling commonWaitDo(status:1)")
+                        self.commonWaitDo(status: 1)
                     }
                     return
                 }
