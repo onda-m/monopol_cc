@@ -829,10 +829,13 @@ extension WaitViewController{
                         let status_listener = statusNumber.intValue
                         
                         print("[WAITREQ][CHECK] useNewSDK=\(self.useNewSDK) status_listener=\(status_listener)")
+                        print("🔥🔥🔥 IF CHECK 🔥🔥🔥 useNewSDK=\(self.useNewSDK) status_listener=\(status_listener)")
                         if self.useNewSDK && status_listener == 3 {
                             print("[WAITREQ][DEBUG] entering LEAVE branch")
+                            print("🔥🔥🔥 LEAVE BRANCH 🔥🔥🔥")
                             Task { @MainActor in
                                 print("[WAITREQ][DEBUG] calling leaveRoomIfNeeded")
+                                print("🔥🔥🔥 CALL leaveRoomIfNeeded 🔥🔥🔥")
                                 await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "firebase.status_listener==3")
                                 self.startWaitingUsingNewSDK()
                             }
