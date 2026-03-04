@@ -810,19 +810,20 @@ extension WaitViewController{
                         }
                         
                         //let dict = snap.value as! [String : AnyObject]
-                        guard let dict = snap.value as? NSDictionary else {
-                            print("[WAIT] conditionRef: snap.value is not NSDictionary, value=\(String(describing: snap.value))")
+                        guard let outer = snap.value as? [String: Any],
+                              let inner = outer.values.first as? [String: Any] else {
+                            print("[WAIT] conditionRef: snap.value parse error, value=\(String(describing: snap.value))")
                             return
                         }
-                        //print(dict.values)
+                        let dict = inner as NSDictionary
 
                         //status_listener = 5:異常終了からの復帰(リスナー側)
                         //０：サシライブ中でない、１：待機が完了、２：サシライブ中、３：バツボタンで終了、
                         //４：コインがなく延長ができなくなった時、５：リスナーが異常終了した時(未使用)、
                         //６：リスナーが異常終了から復帰した時、7：復帰完了（一時的）＞リスナー側は現時間を反映し「２：サシライブ中」に状態変更する
-                        guard let rawStatusListener = dict["status_listener"],
+                        guard let rawStatusListener = inner["status_listener"],
                               let statusNumber = rawStatusListener as? NSNumber else {
-                            print("[WAIT] conditionRef: status_listener missing or not NSNumber, raw=\(dict["status_listener"] as Any)")
+                            print("[WAIT] conditionRef: status_listener missing or not NSNumber, raw=\(inner["status_listener"] as Any)")
                             return
                         }
                         let status_listener = statusNumber.intValue
