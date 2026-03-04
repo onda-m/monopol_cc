@@ -802,6 +802,7 @@ extension WaitViewController{
 
                     //イベント監視
                     self.handle = self.conditionRef.observe(.value, with: { snap in
+                        print("🔥 OBSERVER A START 🔥 conditionRef path=\(self.conditionRef.url) snap=\(snap)")
                         //print("ノードの値が変わりました！: \((snap.value as AnyObject).description)")
                         
                         if(snap.exists() == false){

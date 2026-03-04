@@ -1428,6 +1428,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
         // クラウド上で、ノード Util.INIT_FIREBASE に変更があった場合のコールバック処理
         self.request_handler = self.castWaitConditionRef.observe(.value) { (snap: DataSnapshot) in
             //self.conditionRef.removeObserver(withHandle: handler)
+            print("🔥 OBSERVER B START 🔥 castWaitConditionRef path=\(self.castWaitConditionRef.url) snap=\(snap)")
             print("[WAITREQ][RECV] entering function=viewWillAppear(observe) useNewSDK=\(self.useNewSDK) payload=\(snap)")
 
             if(snap.exists() == false){
