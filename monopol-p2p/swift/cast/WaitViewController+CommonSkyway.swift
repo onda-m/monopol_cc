@@ -825,7 +825,8 @@ extension WaitViewController{
                             return
                         }
                         
-                        if self.useNewSDK, status_listener == 3 {
+                        print("[WAITREQ][CHECK] status_listener=\(status_listener) type=\(type(of: status_listener))")
+                        if self.useNewSDK, Int(status_listener) == 3 {
                             Task { @MainActor in
                                 await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "firebase.status_listener==3")
                                 self.startWaitingUsingNewSDK()
