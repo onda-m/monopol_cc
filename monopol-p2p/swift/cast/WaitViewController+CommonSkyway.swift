@@ -820,10 +820,12 @@ extension WaitViewController{
                         //０：サシライブ中でない、１：待機が完了、２：サシライブ中、３：バツボタンで終了、
                         //４：コインがなく延長ができなくなった時、５：リスナーが異常終了した時(未使用)、
                         //６：リスナーが異常終了から復帰した時、7：復帰完了（一時的）＞リスナー側は現時間を反映し「２：サシライブ中」に状態変更する
-                        guard let status_listener = dict["status_listener"] as? Int else {
-                            print("[WAIT] conditionRef: status_listener missing or not Int, raw=\(dict["status_listener"] as Any)")
+                        guard let rawStatusListener = dict["status_listener"],
+                              let statusNumber = rawStatusListener as? NSNumber else {
+                            print("[WAIT] conditionRef: status_listener missing or not NSNumber, raw=\(dict["status_listener"] as Any)")
                             return
                         }
+                        let status_listener = statusNumber.intValue
                         
                         print("[WAITREQ][CHECK] status_listener=\(status_listener) type=\(type(of: status_listener))")
                         if self.useNewSDK, Int(status_listener) == 3 {
