@@ -835,11 +835,10 @@ extension WaitViewController{
                         if self.useNewSDK && status_listener == 3 {
                             print("[WAITREQ][DEBUG] entering LEAVE branch")
                             print("🔥🔥🔥 LEAVE BRANCH 🔥🔥🔥")
-                            Task { @MainActor in
-                                print("[WAITREQ][DEBUG] calling leaveRoomIfNeeded")
-                                print("🔥🔥🔥 CALL leaveRoomIfNeeded 🔥🔥🔥")
-                                await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "firebase.status_listener==3")
-                                // status_listener == 3: live ended by listener, do NOT restart session
+                            // status_listener == 3: live ended by listener.
+                            // commonWaitDo handles cleanup + leaveRoomIfNeeded; shouldRestart=false skips new session.
+                            DispatchQueue.main.async {
+                                self.commonWaitDo(status: 1, shouldRestart: false)
                             }
                             return
                         }

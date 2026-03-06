@@ -1750,6 +1750,13 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
                 await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "commonWaitDo.listenerEnded")
                 if shouldRestart {
                     self.startWaitingUsingNewSDK()
+                } else {
+                    // status_listener == 3: live ended by listener.
+                    // SkyWay room already left — restore waiting UI without restarting a new session.
+                    self.isSessionClosing = false
+                    self.sessionCloseCompletedOnce = false
+                    self.isCancelWaitFlow = false
+                    self.setWaitState(.waiting)
                 }
             }
         } else {
