@@ -1449,8 +1449,8 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
                 if self.useNewSDK && status_listener == 3 {
                     print("[WAITREQ][DEBUG] entering LEAVE branch status_listener=\(status_listener)")
                     DispatchQueue.main.async {
-                        print("[WAITREQ][DEBUG] calling commonWaitDo(status:1)")
-                        self.commonWaitDo(status: 1)
+                        print("[WAITREQ][DEBUG] calling commonWaitDo(status:1) shouldRestart=false")
+                        self.commonWaitDo(status: 1, shouldRestart: false)
                     }
                     return
                 }
@@ -1654,8 +1654,8 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     //待機状態にするための共通処理
     //statusには１(予約なし)か８(予約あり)が入る
     //予約は廃止
-    func commonWaitDo(status:Int){
-        print("[WAIT][commonWaitDo] useNewSDK=\(useNewSDK) status=\(status)")
+    func commonWaitDo(status:Int, shouldRestart: Bool = true){
+        print("[WAIT][commonWaitDo] useNewSDK=\(useNewSDK) status=\(status) shouldRestart=\(shouldRestart)")
         //待機状態へ
         //くるくる表示開始
         if(self.busyIndicator.isDescendant(of: self.view)){
@@ -1748,7 +1748,9 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
         if useNewSDK {
             Task {
                 await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "commonWaitDo.listenerEnded")
-                self.startWaitingUsingNewSDK()
+                if shouldRestart {
+                    self.startWaitingUsingNewSDK()
+                }
             }
         } else {
             self.setup()

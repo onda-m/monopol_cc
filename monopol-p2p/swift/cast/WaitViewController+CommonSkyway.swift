@@ -839,7 +839,7 @@ extension WaitViewController{
                                 print("[WAITREQ][DEBUG] calling leaveRoomIfNeeded")
                                 print("🔥🔥🔥 CALL leaveRoomIfNeeded 🔥🔥🔥")
                                 await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "firebase.status_listener==3")
-                                self.startWaitingUsingNewSDK()
+                                // status_listener == 3: live ended by listener, do NOT restart session
                             }
                             return
                         }
