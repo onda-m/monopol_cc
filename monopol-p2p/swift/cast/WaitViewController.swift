@@ -239,9 +239,12 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             castWaitDialog.allCoverMessage.isHidden = true
             castWaitDialog.allCoverRequest.isHidden = true
             castWaitDialog.topInfoLabel.isHidden = true
+            castWaitDialog.re_connect_label.isHidden = true
+            castWaitDialog.re_connect_label.text = nil
             castWaitDialog.cancelWaitBtn.isEnabled = true
             castWaitDialog.cancelWaitBtn.alpha = 1.0
             castWaitDialog.resetCancelState()
+            print("[END][CAST] returning to waiting UI re_connect_label hidden=\(castWaitDialog.re_connect_label.isHidden) text=\(castWaitDialog.re_connect_label.text ?? "nil")")
 
         case .connected:
             // 配信中: 配信UI表示、待機UI非表示

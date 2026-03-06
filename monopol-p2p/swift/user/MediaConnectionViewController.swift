@@ -1396,17 +1396,29 @@ class MediaConnectionViewController: UIViewController,UITextViewDelegate ,UITabB
                 //通常ライブ配信の場合
                 //監視の解放
                 self.conditionRef.removeObserver(withHandle: self.handle)
-                
+
                 //初期化
                 //self.appDelegate.request_count_num = 0//動画再生画面を含むこの画面を何回タップしたか。
                 self.appDelegate.request_password = "0"
                 self.appDelegate.request_cast_id = 0//選択中（かつ申請中）のキャスト
-                
+
                 self.conditionRef = self.rootRef.child(Util.INIT_FIREBASE
                     + "/"
                     + self.liveCastId + "/" + String(self.user_id))
                 let data = ["status_listener": 3]
                 self.conditionRef.updateChildValues(data)
+
+                if self.useNewSDK {
+                    print("[END][LISTENER] closing from tapEndCall")
+                    Task { @MainActor in
+                        await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "listener.tapEndCall")
+                        if let nav = self.navigationController {
+                            nav.popViewController(animated: true)
+                        } else {
+                            self.dismiss(animated: true)
+                        }
+                    }
+                }
             }
             /**************共通で使用ここまで*****************/
         })
