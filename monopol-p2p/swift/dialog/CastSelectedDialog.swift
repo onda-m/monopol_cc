@@ -570,6 +570,11 @@ class CastSelectedDialog: UIView,UIGestureRecognizerDelegate {
                                         //申請直後リスナーが落ちたときのストリーマーがロックされてしまう問題
                                         UtilFunc.deleteCastLock(cast_id:cast_id, user_id:user_id, type:2)
 
+                                        // ライブ画面へ遷移前にダイアログを隠す
+                                        // dismiss後に「サシライブ申請中」が再表示されないようにする
+                                        self.infoLbl.isHidden = true
+                                        self.isHidden = true
+
                                         UtilToViewController.toMediaConnectionViewController(roomName: roomName)
                                     }
                                 })
