@@ -820,14 +820,22 @@ extension MediaConnectionViewController{
                     let live_time_temp = self.temp_dict["live_time"] as! Int
                     if(live_time_temp > 0){
                         self.appDelegate.count = live_time_temp
-                        
+
                         //ゼロに戻す
                         let data = ["live_time": 0, "status_listener": 2]
                         self.conditionRef.updateChildValues(data)
 
                         return
                     }
-                    
+
+                    // リスナーが終了ボタンを押した / Firebase から status_listener==3 を受信
+                    if let statusListener = self.temp_dict["status_listener"] as? Int,
+                       statusListener == 3,
+                       self.useNewSDK {
+                        self.closeLiveScreenAsListener()
+                        return
+                    }
+
                     //機能廃止
                     /*
                     //ストリーマーからスクショが送信されて来た場合
@@ -1201,6 +1209,22 @@ extension MediaConnectionViewController {
         // TODO: use stable castId as roomName (現在はキャストのpeerId=UUIDを使用)
         print("[NewSDK][Phase2-4a] joinRoomUsingNewSDK called roomName=\(roomName)")
         SkywayManager.sharedManager().connectStart(roomName: roomName, delegate: self)
+    }
+
+    /// status_listener == 3 受信時のリスナー側終了処理 (NewSDK専用)
+    /// SkyWay ルームを離脱してからライブ画面を閉じる（push/present両対応）
+    @MainActor
+    func closeLiveScreenAsListener() {
+        print("[END][LISTENER] closeLiveScreenAsListener")
+        self.endLiveDoCommon()
+        Task { @MainActor in
+            await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "listener.status_listener==3")
+            if let nav = self.navigationController {
+                nav.popViewController(animated: true)
+            } else {
+                self.dismiss(animated: true)
+            }
+        }
     }
 }
 
