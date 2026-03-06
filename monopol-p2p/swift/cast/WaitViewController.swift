@@ -246,6 +246,21 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             castWaitDialog.resetCancelState()
             print("[END][CAST] returning to waiting UI re_connect_label hidden=\(castWaitDialog.re_connect_label.isHidden) text=\(castWaitDialog.re_connect_label.text ?? "nil")")
 
+            // 接続状態から戻った際に残るビデオ関連ビューを非表示
+            localStreamView.isHidden = true
+            localStreamView.alpha = 0
+            remoteStreamView.isHidden = true
+            remoteStreamView.alpha = 0
+            screenshotManageMainView.isHidden = true
+            effectListDialog.isHidden = true
+            captureToolbar.isHidden = true
+            myTabBar.isHidden = false
+            print("[END][CAST][WAITING] localStreamView hidden=\(localStreamView.isHidden) alpha=\(localStreamView.alpha) superview=\(localStreamView.superview != nil) frame=\(localStreamView.frame)")
+            print("[END][CAST][WAITING] remoteStreamView hidden=\(remoteStreamView.isHidden) alpha=\(remoteStreamView.alpha) superview=\(remoteStreamView.superview != nil) frame=\(remoteStreamView.frame)")
+            print("[END][CAST][WAITING] screenshotManageMainView hidden=\(screenshotManageMainView.isHidden) alpha=\(screenshotManageMainView.alpha) superview=\(screenshotManageMainView.superview != nil) frame=\(screenshotManageMainView.frame)")
+            print("[END][CAST][WAITING] effectListDialog hidden=\(effectListDialog.isHidden) alpha=\(effectListDialog.alpha) superview=\(effectListDialog.superview != nil) frame=\(effectListDialog.frame)")
+            print("[END][CAST][WAITING] captureToolbar hidden=\(captureToolbar.isHidden) alpha=\(captureToolbar.alpha) superview=\(captureToolbar.superview != nil) frame=\(captureToolbar.frame)")
+
         case .connected:
             // 配信中: 配信UI表示、待機UI非表示
             countDownLabel?.isHidden = false
