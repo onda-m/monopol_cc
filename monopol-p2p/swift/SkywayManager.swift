@@ -250,7 +250,6 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         subscribedPublicationIds.removeAll()  // リセット
         roomTask?.cancel()
         roomTask = Task { @MainActor in
-            await leaveRoomIfNeeded(reason: "connectStart cleanup", setRoomClosed: false)
             guard !Task.isCancelled else {
                 print("[SkyMgr] connectStart Task cancelled before join")
                 isConnectStarted = false
