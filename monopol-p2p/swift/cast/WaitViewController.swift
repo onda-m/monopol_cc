@@ -262,8 +262,9 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             detachedRemoteVideoViews = Array(remoteStreamView.subviews)
             detachedRemoteVideoViews.forEach { $0.removeFromSuperview() }
 
-            localStreamView.isHidden = true
-            localStreamView.alpha = 0
+            localStreamView.isHidden = false
+            localStreamView.alpha = 1
+            localStreamView.backgroundColor = .black
             remoteStreamView.isHidden = true
             remoteStreamView.alpha = 0
             screenshotManageMainView.isHidden = true
