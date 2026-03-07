@@ -839,6 +839,10 @@ extension WaitViewController{
                             // commonWaitDo handles cleanup + leaveRoomIfNeeded; shouldRestart=false skips new session.
                             DispatchQueue.main.async {
                                 self.commonWaitDo(status: 1, shouldRestart: false)
+                                // 前回のリクエストノードを削除して次のリスナー申請を受け付けられるようにする
+                                self.rootRef
+                                    .child(Util.INIT_FIREBASE + "/" + String(self.user_id) + "/" + String(self.appDelegate.live_target_user_id))
+                                    .removeValue()
                             }
                             return
                         }
@@ -1265,7 +1269,13 @@ extension WaitViewController: SkywaySessionDelegate {
         // SkywayManager の操作（connectStart等）は行わない（memberDidLeave内のleaveRoomIfNeededと競合するため）
         // 再接続が必要な場合は connectEnd() 後に別途トリガーする
         isLiveConnectionStarted = false
-        print("[NewSDK] WaitViewController: connectDisconnect - isLiveConnectionStarted = false")
+        print("[NewSDK] WaitViewController: connectDisconnect - isLiveConnectionStarted = false isSessionClosing=\(isSessionClosing)")
+        // isSessionClosing が true のとき（status_listener==3 による強制leave中）は
+        // commonWaitDo の Task 内で leaveRoomIfNeeded 完了後に setWaitState を行うため、ここではスキップ
+        guard !isSessionClosing else {
+            print("[NewSDK] WaitViewController: connectDisconnect - skip setWaitState(.waiting) isSessionClosing=true")
+            return
+        }
         Task { @MainActor in
             self.setWaitState(.waiting)
             self.returnToWaitingUI()

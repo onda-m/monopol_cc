@@ -254,7 +254,6 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             screenshotManageMainView.isHidden = true
             effectListDialog.isHidden = true
             captureToolbar.isHidden = true
-            myTabBar.isHidden = false
             print("[END][CAST][WAITING] localStreamView hidden=\(localStreamView.isHidden) alpha=\(localStreamView.alpha) superview=\(localStreamView.superview != nil) frame=\(localStreamView.frame)")
             print("[END][CAST][WAITING] remoteStreamView hidden=\(remoteStreamView.isHidden) alpha=\(remoteStreamView.alpha) superview=\(remoteStreamView.superview != nil) frame=\(remoteStreamView.frame)")
             print("[END][CAST][WAITING] screenshotManageMainView hidden=\(screenshotManageMainView.isHidden) alpha=\(screenshotManageMainView.alpha) superview=\(screenshotManageMainView.superview != nil) frame=\(screenshotManageMainView.frame)")
@@ -275,6 +274,9 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             castWaitDialog.allCoverMessage.isHidden = true
             castWaitDialog.allCoverRequest.isHidden = true
             castWaitDialog.topInfoLabel.isHidden = true
+            // .waiting で非表示にしたカメラビューを配信中は再表示
+            localStreamView.isHidden = false
+            localStreamView.alpha = 1
 
         case .starting:
             // 待機開始準備中: 配信UI非表示 + 操作無効化
@@ -1764,13 +1766,20 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
 
         //skywayの待機処理
         if useNewSDK {
-            Task {
+            if !shouldRestart {
+                // connectDisconnect が leave 完了前に setWaitState(.waiting) を呼ばないよう抑制
+                isSessionClosing = true
+            }
+            Task { @MainActor in
+                print("[END][CAST][ORDER] before leaveRoomIfNeeded")
                 await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "commonWaitDo.listenerEnded")
+                print("[END][CAST][ORDER] after leaveRoomIfNeeded")
                 if shouldRestart {
                     self.startWaitingUsingNewSDK()
                 } else {
                     // status_listener == 3: live ended by listener.
-                    // SkyWay room already left — restore waiting UI without restarting a new session.
+                    // leaveRoomIfNeeded 完了後に UI を待機状態へ遷移（detachLocalVideo 等が確実に終わってから）
+                    print("[END][CAST][ORDER] setWaitState(.waiting)")
                     self.isSessionClosing = false
                     self.sessionCloseCompletedOnce = false
                     self.isCancelWaitFlow = false
