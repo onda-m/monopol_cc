@@ -252,6 +252,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             castWaitDialog.cancelWaitBtn.isEnabled = true
             castWaitDialog.cancelWaitBtn.alpha = 1.0
             castWaitDialog.resetCancelState()
+            castWaitDialog.setCenterWaitDialogView(true)
             self.view.bringSubviewToFront(castWaitDialog)
             castWaitDialog.bringSubviewToFront(castWaitDialog.waitDialogView)
             print("[END][CAST] returning to waiting UI re_connect_label hidden=\(castWaitDialog.re_connect_label.isHidden) text=\(castWaitDialog.re_connect_label.text ?? "nil")")
@@ -262,14 +263,14 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             detachedRemoteVideoViews = Array(remoteStreamView.subviews)
             detachedRemoteVideoViews.forEach { $0.removeFromSuperview() }
 
-            localStreamView.isHidden = false
-            localStreamView.alpha = 1
-            localStreamView.backgroundColor = .black
+            localStreamView.isHidden = true
+            localStreamView.alpha = 0
             remoteStreamView.isHidden = true
             remoteStreamView.alpha = 0
             screenshotManageMainView.isHidden = true
             effectListDialog.isHidden = true
             captureToolbar.isHidden = true
+            castWaitDialog.backgroundColor = .black
             self.view.bringSubviewToFront(castWaitDialog)
 
             print("[END][CAST][WAITING] castWaitDialog hidden=\(castWaitDialog.isHidden) alpha=\(castWaitDialog.alpha) superview=\(castWaitDialog.superview != nil) window=\(castWaitDialog.window != nil) frame=\(castWaitDialog.frame)")
@@ -295,6 +296,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             castWaitDialog.allCoverMessage.isHidden = true
             castWaitDialog.allCoverRequest.isHidden = true
             castWaitDialog.topInfoLabel.isHidden = true
+            castWaitDialog.setCenterWaitDialogView(false)
             // .waiting で退避した VideoView を復元
             detachedLocalVideoViews.forEach { localStreamView.addSubview($0) }
             detachedLocalVideoViews = []

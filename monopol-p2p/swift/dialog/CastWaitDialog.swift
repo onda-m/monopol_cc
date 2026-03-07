@@ -824,6 +824,21 @@ class CastWaitDialog: UIView {
         }
     }
 
+    // waiting 画面で waitDialogView を中央配置するフラグ
+    private var shouldCenterWaitDialogView = false
+
+    func setCenterWaitDialogView(_ centered: Bool) {
+        shouldCenterWaitDialogView = centered
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if shouldCenterWaitDialogView {
+            waitDialogView.center = CGPoint(x: bounds.midX, y: bounds.midY)
+        }
+    }
+
     //自分自身はサワレナイ(下記を透過したいVIewに記述)
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let view = super.hitTest(point, with: event)
