@@ -131,6 +131,10 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     /*************************************/
     //skyway関連(ここまで)
     /*************************************/
+
+    // .waiting で AVSampleBufferDisplayLayer を含む VideoView を UI階層から退避、.connected で復元
+    private var detachedLocalVideoViews: [UIView] = []
+    private var detachedRemoteVideoViews: [UIView] = []
     
     //エフェクト用タイマー
     var timerEffect = Timer()
@@ -252,7 +256,12 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             castWaitDialog.bringSubviewToFront(castWaitDialog.waitDialogView)
             print("[END][CAST] returning to waiting UI re_connect_label hidden=\(castWaitDialog.re_connect_label.isHidden) text=\(castWaitDialog.re_connect_label.text ?? "nil")")
 
-            // 接続状態から戻った際に残るビデオ関連ビューを非表示
+            // SkyWay VideoView (AVSampleBufferDisplayLayer) を UI階層から退避
+            detachedLocalVideoViews = Array(localStreamView.subviews)
+            detachedLocalVideoViews.forEach { $0.removeFromSuperview() }
+            detachedRemoteVideoViews = Array(remoteStreamView.subviews)
+            detachedRemoteVideoViews.forEach { $0.removeFromSuperview() }
+
             localStreamView.isHidden = true
             localStreamView.alpha = 0
             remoteStreamView.isHidden = true
@@ -260,11 +269,13 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             screenshotManageMainView.isHidden = true
             effectListDialog.isHidden = true
             captureToolbar.isHidden = true
-            print("[END][CAST][WAITING] castWaitDialog hidden=\(castWaitDialog.isHidden) alpha=\(castWaitDialog.alpha) superview=\(castWaitDialog.superview != nil) frame=\(castWaitDialog.frame)")
+            self.view.bringSubviewToFront(castWaitDialog)
+
+            print("[END][CAST][WAITING] castWaitDialog hidden=\(castWaitDialog.isHidden) alpha=\(castWaitDialog.alpha) superview=\(castWaitDialog.superview != nil) window=\(castWaitDialog.window != nil) frame=\(castWaitDialog.frame)")
             print("[END][CAST][WAITING] castWaitDialog.waitDialogView hidden=\(castWaitDialog.waitDialogView.isHidden) alpha=\(castWaitDialog.waitDialogView.alpha) superview=\(castWaitDialog.waitDialogView.superview != nil) frame=\(castWaitDialog.waitDialogView.frame)")
             print("[END][CAST][WAITING] castWaitDialog.statusLbl hidden=\(castWaitDialog.statusLbl.isHidden) alpha=\(castWaitDialog.statusLbl.alpha) superview=\(castWaitDialog.statusLbl.superview != nil) frame=\(castWaitDialog.statusLbl.frame)")
-            print("[END][CAST][WAITING] localStreamView hidden=\(localStreamView.isHidden) alpha=\(localStreamView.alpha) superview=\(localStreamView.superview != nil) frame=\(localStreamView.frame)")
-            print("[END][CAST][WAITING] remoteStreamView hidden=\(remoteStreamView.isHidden) alpha=\(remoteStreamView.alpha) superview=\(remoteStreamView.superview != nil) frame=\(remoteStreamView.frame)")
+            print("[END][CAST][WAITING] localStreamView hidden=\(localStreamView.isHidden) alpha=\(localStreamView.alpha) subviews=\(localStreamView.subviews.count) superview=\(localStreamView.superview != nil) frame=\(localStreamView.frame)")
+            print("[END][CAST][WAITING] remoteStreamView hidden=\(remoteStreamView.isHidden) alpha=\(remoteStreamView.alpha) subviews=\(remoteStreamView.subviews.count) superview=\(remoteStreamView.superview != nil) frame=\(remoteStreamView.frame)")
             print("[END][CAST][WAITING] screenshotManageMainView hidden=\(screenshotManageMainView.isHidden) alpha=\(screenshotManageMainView.alpha) superview=\(screenshotManageMainView.superview != nil) frame=\(screenshotManageMainView.frame)")
             print("[END][CAST][WAITING] effectListDialog hidden=\(effectListDialog.isHidden) alpha=\(effectListDialog.alpha) superview=\(effectListDialog.superview != nil) frame=\(effectListDialog.frame)")
             print("[END][CAST][WAITING] captureToolbar hidden=\(captureToolbar.isHidden) alpha=\(captureToolbar.alpha) superview=\(captureToolbar.superview != nil) frame=\(captureToolbar.frame)")
@@ -283,7 +294,11 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             castWaitDialog.allCoverMessage.isHidden = true
             castWaitDialog.allCoverRequest.isHidden = true
             castWaitDialog.topInfoLabel.isHidden = true
-            // .waiting で非表示にしたカメラビューを配信中は再表示
+            // .waiting で退避した VideoView を復元
+            detachedLocalVideoViews.forEach { localStreamView.addSubview($0) }
+            detachedLocalVideoViews = []
+            detachedRemoteVideoViews.forEach { remoteStreamView.addSubview($0) }
+            detachedRemoteVideoViews = []
             localStreamView.isHidden = false
             localStreamView.alpha = 1
 
