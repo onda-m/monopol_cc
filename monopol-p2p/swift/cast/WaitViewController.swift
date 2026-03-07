@@ -252,8 +252,8 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             castWaitDialog.bringSubviewToFront(castWaitDialog.waitDialogView)
             print("[END][CAST] returning to waiting UI re_connect_label hidden=\(castWaitDialog.re_connect_label.isHidden) text=\(castWaitDialog.re_connect_label.text ?? "nil")")
 
-            localStreamView.isHidden = true
-            localStreamView.alpha = 0
+            localStreamView.isHidden = false
+            localStreamView.alpha = 1
             remoteStreamView.isHidden = true
             remoteStreamView.alpha = 0
             screenshotManageMainView.isHidden = true
