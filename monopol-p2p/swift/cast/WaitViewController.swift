@@ -132,10 +132,6 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     //skyway関連(ここまで)
     /*************************************/
 
-    // .waiting で AVSampleBufferDisplayLayer を含む VideoView を UI階層から退避、.connected で復元
-    private var detachedLocalVideoViews: [UIView] = []
-    private var detachedRemoteVideoViews: [UIView] = []
-    
     //エフェクト用タイマー
     var timerEffect = Timer()
     //タイマーの変数
@@ -257,12 +253,6 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             castWaitDialog.bringSubviewToFront(castWaitDialog.waitDialogView)
             print("[END][CAST] returning to waiting UI re_connect_label hidden=\(castWaitDialog.re_connect_label.isHidden) text=\(castWaitDialog.re_connect_label.text ?? "nil")")
 
-            // SkyWay VideoView (AVSampleBufferDisplayLayer) を UI階層から退避
-            detachedLocalVideoViews = Array(localStreamView.subviews)
-            detachedLocalVideoViews.forEach { $0.removeFromSuperview() }
-            detachedRemoteVideoViews = Array(remoteStreamView.subviews)
-            detachedRemoteVideoViews.forEach { $0.removeFromSuperview() }
-
             localStreamView.isHidden = true
             localStreamView.alpha = 0
             remoteStreamView.isHidden = true
@@ -297,11 +287,6 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             castWaitDialog.allCoverRequest.isHidden = true
             castWaitDialog.topInfoLabel.isHidden = true
             castWaitDialog.setCenterWaitDialogView(false)
-            // .waiting で退避した VideoView を復元
-            detachedLocalVideoViews.forEach { localStreamView.addSubview($0) }
-            detachedLocalVideoViews = []
-            detachedRemoteVideoViews.forEach { remoteStreamView.addSubview($0) }
-            detachedRemoteVideoViews = []
             localStreamView.isHidden = false
             localStreamView.alpha = 1
 
