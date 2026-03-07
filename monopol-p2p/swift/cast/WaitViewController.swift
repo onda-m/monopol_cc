@@ -270,7 +270,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             screenshotManageMainView.isHidden = true
             effectListDialog.isHidden = true
             captureToolbar.isHidden = true
-            castWaitDialog.backgroundColor = .black
+            self.view.backgroundColor = .black
             self.view.bringSubviewToFront(castWaitDialog)
 
             print("[END][CAST][WAITING] castWaitDialog hidden=\(castWaitDialog.isHidden) alpha=\(castWaitDialog.alpha) superview=\(castWaitDialog.superview != nil) window=\(castWaitDialog.window != nil) frame=\(castWaitDialog.frame)")
