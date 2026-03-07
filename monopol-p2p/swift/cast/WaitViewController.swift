@@ -248,7 +248,6 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             castWaitDialog.cancelWaitBtn.isEnabled = true
             castWaitDialog.cancelWaitBtn.alpha = 1.0
             castWaitDialog.resetCancelState()
-            castWaitDialog.setCenterWaitDialogView(true)
             self.view.bringSubviewToFront(castWaitDialog)
             castWaitDialog.bringSubviewToFront(castWaitDialog.waitDialogView)
             print("[END][CAST] returning to waiting UI re_connect_label hidden=\(castWaitDialog.re_connect_label.isHidden) text=\(castWaitDialog.re_connect_label.text ?? "nil")")
@@ -260,7 +259,6 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             screenshotManageMainView.isHidden = true
             effectListDialog.isHidden = true
             captureToolbar.isHidden = true
-            self.view.backgroundColor = .black
             self.view.bringSubviewToFront(castWaitDialog)
 
             print("[END][CAST][WAITING] castWaitDialog hidden=\(castWaitDialog.isHidden) alpha=\(castWaitDialog.alpha) superview=\(castWaitDialog.superview != nil) window=\(castWaitDialog.window != nil) frame=\(castWaitDialog.frame)")
@@ -286,7 +284,6 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             castWaitDialog.allCoverMessage.isHidden = true
             castWaitDialog.allCoverRequest.isHidden = true
             castWaitDialog.topInfoLabel.isHidden = true
-            castWaitDialog.setCenterWaitDialogView(false)
             localStreamView.isHidden = false
             localStreamView.alpha = 1
 
