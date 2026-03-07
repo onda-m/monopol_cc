@@ -1226,6 +1226,8 @@ extension WaitViewController: SkywaySessionDelegate {
     }
     func connectSucces() {
         setWaitState(.waiting)
+        SkywayManager.sharedManager().setWaitLocal(localStreamView)
+        SkywayManager.sharedManager().setRemoteView(remoteStreamView)
         print("[NewSDK] WaitViewController: connectSucces - 待機完了 isNewSDKReadyForApproval→true isSkyWayReady=\(isSkyWayReady) isPendingApproval=\(isPendingApproval)")
         isNewSDKReadyForApproval = true
         Task { @MainActor in
