@@ -233,8 +233,12 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             endCallButton?.isHidden = true
             oshiraseView?.isHidden = true
             starGetView?.isHidden = true
+            castWaitDialog.isHidden = false
+            castWaitDialog.alpha = 1
             castWaitDialog.waitDialogView.isHidden = false
+            castWaitDialog.waitDialogView.alpha = 1
             castWaitDialog.statusLbl.isHidden = false
+            castWaitDialog.statusLbl.alpha = 1
             castWaitDialog.statusLbl.text = "待機中"
             castWaitDialog.allCoverMessage.isHidden = true
             castWaitDialog.allCoverRequest.isHidden = true
@@ -244,6 +248,8 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             castWaitDialog.cancelWaitBtn.isEnabled = true
             castWaitDialog.cancelWaitBtn.alpha = 1.0
             castWaitDialog.resetCancelState()
+            self.view.bringSubviewToFront(castWaitDialog)
+            castWaitDialog.bringSubviewToFront(castWaitDialog.waitDialogView)
             print("[END][CAST] returning to waiting UI re_connect_label hidden=\(castWaitDialog.re_connect_label.isHidden) text=\(castWaitDialog.re_connect_label.text ?? "nil")")
 
             // 接続状態から戻った際に残るビデオ関連ビューを非表示
@@ -254,6 +260,9 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             screenshotManageMainView.isHidden = true
             effectListDialog.isHidden = true
             captureToolbar.isHidden = true
+            print("[END][CAST][WAITING] castWaitDialog hidden=\(castWaitDialog.isHidden) alpha=\(castWaitDialog.alpha) superview=\(castWaitDialog.superview != nil) frame=\(castWaitDialog.frame)")
+            print("[END][CAST][WAITING] castWaitDialog.waitDialogView hidden=\(castWaitDialog.waitDialogView.isHidden) alpha=\(castWaitDialog.waitDialogView.alpha) superview=\(castWaitDialog.waitDialogView.superview != nil) frame=\(castWaitDialog.waitDialogView.frame)")
+            print("[END][CAST][WAITING] castWaitDialog.statusLbl hidden=\(castWaitDialog.statusLbl.isHidden) alpha=\(castWaitDialog.statusLbl.alpha) superview=\(castWaitDialog.statusLbl.superview != nil) frame=\(castWaitDialog.statusLbl.frame)")
             print("[END][CAST][WAITING] localStreamView hidden=\(localStreamView.isHidden) alpha=\(localStreamView.alpha) superview=\(localStreamView.superview != nil) frame=\(localStreamView.frame)")
             print("[END][CAST][WAITING] remoteStreamView hidden=\(remoteStreamView.isHidden) alpha=\(remoteStreamView.alpha) superview=\(remoteStreamView.superview != nil) frame=\(remoteStreamView.frame)")
             print("[END][CAST][WAITING] screenshotManageMainView hidden=\(screenshotManageMainView.isHidden) alpha=\(screenshotManageMainView.alpha) superview=\(screenshotManageMainView.superview != nil) frame=\(screenshotManageMainView.frame)")
