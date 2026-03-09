@@ -1306,10 +1306,15 @@ extension WaitViewController: SkywaySessionDelegate {
     }
     func connectError() {
         setWaitState(.idle)
-        print("[NewSDK] WaitViewController: connectError - 接続エラー isNewSDKReadyForApproval→false isSkyWayReady→false")
+        print("[NewSDK] WaitViewController: connectError - 接続エラー isNewSDKReadyForApproval→false isSkyWayReady→false isPendingApproval=\(isPendingApproval)")
         DispatchQueue.main.async { [weak self] in
             self?.isNewSDKReadyForApproval = false
             self?.isSkyWayReady = false
+            if self?.isPendingApproval == true {
+                print("[NewSDK] connectError: clearing isPendingApproval to break deadlock")
+                self?.isPendingApproval = false
+                self?.pendingApprovalCompletion = nil
+            }
         }
     }
 }
