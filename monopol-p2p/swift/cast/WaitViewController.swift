@@ -193,7 +193,13 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
 
     @MainActor
     func setWaitState(_ newState: WaitState) {
-        guard waitState != newState else { return }
+        guard waitState != newState else {
+            print("[WaitState] SKIP(guard) \(waitState)→\(newState) thread=\(Thread.isMainThread ? "MT" : "BG")")
+            #if DEBUG
+            print("[WaitState][SKIP][cs] \(Thread.callStackSymbols.prefix(4).joined(separator: " | "))")
+            #endif
+            return
+        }
         print("[WaitState] \(waitState)→\(newState) thread=\(Thread.isMainThread ? "MT" : "BG") cast_id=\(user_id)")
         #if DEBUG
         print("[WaitState][cs] \(Thread.callStackSymbols.prefix(5).joined(separator: " | "))")
@@ -339,6 +345,8 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        let instanceId = UInt(bitPattern: ObjectIdentifier(self)) & 0xFFFF
+        print("[VC][LIFECYCLE] viewDidLoad instance=0x\(String(instanceId, radix: 16)) thread=\(Thread.isMainThread ? "MT" : "BG")")
 
         // 新SDK: UI状態を初期化（前画面からの戻り等で状態が残らないようにする）
         Task { @MainActor in
@@ -1450,6 +1458,8 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     //フォアグラウンドなどではなく、この画面に遷移したときにだけ実行される。（1度のみ実行）
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        let instanceId = UInt(bitPattern: ObjectIdentifier(self)) & 0xFFFF
+        print("[VC][LIFECYCLE] viewWillAppear instance=0x\(String(instanceId, radix: 16)) waitState=\(waitState) thread=\(Thread.isMainThread ? "MT" : "BG")")
 
         // 子ノード condition への参照
         self.castWaitConditionRef = self.rootRef.child(Util.INIT_FIREBASE + "/"
@@ -1634,12 +1644,14 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     
     //終了ボタンを押した時の処理
     @IBAction func tapCloseBtn(_ sender: Any) {
+        print("[TAP] tapCloseBtn waitState=\(waitState) isSessionClosing=\(isSessionClosing) isLiveConnectionStarted=\(isLiveConnectionStarted) thread=\(Thread.isMainThread ? "MT" : "BG")")
         //UIAlertControllerを用意
         let actionAlert = UIAlertController(title: Util.CAST_LIVE_CLOSE_STR, message: nil, preferredStyle: UIAlertController.Style.actionSheet)
         
         //UIAlertControllerにアクションを追加する
         let modifyAction = UIAlertAction(title: "配信を終了する", style: UIAlertAction.Style.default, handler: {
             (action: UIAlertAction!) in
+            print("[TAP] tapCloseBtn:modifyAction(handler) FIRED waitState=\(self.waitState) isSessionClosing=\(self.isSessionClosing)")
             //選択された時の処理
             //初期化
             self.refreshBtn.isHidden = true
@@ -1684,7 +1696,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     //statusには１(予約なし)か８(予約あり)が入る
     //予約は廃止
     func commonWaitDo(status:Int, shouldRestart: Bool = true){
-        print("[WAIT][commonWaitDo] useNewSDK=\(useNewSDK) status=\(status) shouldRestart=\(shouldRestart)")
+        print("[WAIT][commonWaitDo] ENTER waitState=\(waitState) useNewSDK=\(useNewSDK) status=\(status) shouldRestart=\(shouldRestart) isSessionClosing=\(isSessionClosing) isLiveConnectionStarted=\(isLiveConnectionStarted) thread=\(Thread.isMainThread ? "MT" : "BG")")
         //待機状態へ
         //くるくる表示開始
         if(self.busyIndicator.isDescendant(of: self.view)){
@@ -2036,6 +2048,10 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
                 self.userIconImageView.image = UIImage(named:"no_image")
             }
         }
+    }
+    deinit {
+        let instanceId = UInt(bitPattern: ObjectIdentifier(self)) & 0xFFFF
+        print("[VC][LIFECYCLE] deinit instance=0x\(String(instanceId, radix: 16))")
     }
 }//メインのクラスはここまで
 

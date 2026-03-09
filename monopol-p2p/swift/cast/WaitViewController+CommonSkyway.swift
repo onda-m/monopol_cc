@@ -1131,7 +1131,7 @@ extension WaitViewController{
 extension WaitViewController {
 
     func startWaitingUsingNewSDK() {
-        print("[NewSDK][MVP] startWaitingUsingNewSDK triggered")
+        print("[NewSDK][MVP] startWaitingUsingNewSDK ENTER waitState=\(waitState) isSessionClosing=\(isSessionClosing) isLiveConnectionStarted=\(isLiveConnectionStarted) thread=\(Thread.isMainThread ? "MT" : "BG")")
         // 新しい待機サイクルのためフラグリセット
         isSessionClosing = false
         sessionCloseCompletedOnce = false
