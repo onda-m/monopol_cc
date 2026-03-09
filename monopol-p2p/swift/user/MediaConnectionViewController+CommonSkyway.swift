@@ -1208,6 +1208,7 @@ extension MediaConnectionViewController {
     func joinRoomUsingNewSDK(roomName: String) {
         // TODO: use stable castId as roomName (現在はキャストのpeerId=UUIDを使用)
         print("[NewSDK][Phase2-4a] joinRoomUsingNewSDK called roomName=\(roomName)")
+        SkywayManager.sharedManager().setRemoteView(remoteView: self.remoteStreamView)
         SkywayManager.sharedManager().connectStart(roomName: roomName, delegate: self)
     }
 
