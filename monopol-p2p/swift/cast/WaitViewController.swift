@@ -1799,12 +1799,12 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
                     self.startWaitingUsingNewSDK()
                 } else {
                     // status_listener == 3: live ended by listener.
-                    // leaveRoomIfNeeded 完了後に UI を待機状態へ遷移（detachLocalVideo 等が確実に終わってから）
-                    print("[END][CAST][ORDER] setWaitState(.waiting)")
-                    self.isSessionClosing = false
-                    self.sessionCloseCompletedOnce = false
-                    self.isCancelWaitFlow = false
-                    self.setWaitState(.waiting)
+                    // leaveRoomIfNeeded 完了後は room 未参加状態のため、
+                    // 次のリクエスト承認に備えて SkyWay 再接続を開始する。
+                    // startWaitingUsingNewSDK() が内部で isSessionClosing/flags リセット +
+                    // setWaitState(.stopping) を行うため setWaitState(.waiting) は不要。
+                    print("[END][CAST][ORDER] startWaitingUsingNewSDK (shouldRestart=false path)")
+                    self.startWaitingUsingNewSDK()
                 }
             }
         } else {
