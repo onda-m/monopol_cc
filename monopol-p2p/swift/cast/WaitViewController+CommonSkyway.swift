@@ -1265,6 +1265,16 @@ extension WaitViewController: SkywaySessionDelegate {
         Task { @MainActor in
             self.setWaitState(.connected)
             self.startConnection()
+            // NewSDK: 旧SDK の DATACONNECTION_EVENT_OPEN で行っていたタイマー起動を補完
+            if !self.timerLive.isValid {
+                self.appDelegate.count = 0
+                self.timerLive = Timer.scheduledTimer(timeInterval: 1.0,
+                                                      target: self,
+                                                      selector: #selector(self.timerInterruptLive(_:)),
+                                                      userInfo: nil,
+                                                      repeats: true)
+                print("[NewSDK] remoteConnectSucces: timerLive started")
+            }
         }
     }
     func connectDisconnect() {
