@@ -1138,6 +1138,13 @@ extension WaitViewController {
         isCancelWaitFlow = false
         sessionCloseTimeoutTask?.cancel()
         sessionCloseTimeoutTask = nil
+
+        // Firebase の前回配信データをリセット（status=99, room_name 等が残留する問題の防止）
+        self.rootRef.child(Util.INIT_FIREBASE + "/" + String(self.user_id)).removeValue()
+        self.castWaitDialog.status = 0
+        self.appDelegate.live_target_user_name = ""
+        self.appDelegate.live_target_user_id = 0
+        print("[NewSDK][MVP] startWaitingUsingNewSDK: Firebase userrequest/\(self.user_id) removed")
         // 待機開始準備中: 配信UIを非表示にし操作を無効化
         // sessionStart → connectSucces() で .waiting になる
         Task { @MainActor in
@@ -1278,6 +1285,24 @@ extension WaitViewController: SkywaySessionDelegate {
                                                       userInfo: nil,
                                                       repeats: true)
                 print("[NewSDK] remoteConnectSucces: timerLive started")
+            }
+
+            // NewSDK: 旧SDK の DATACONNECTION_EVENT_OPEN で行っていた userIconImageView 初期化を補完
+            // ① タップ有効化 + ② gestureRecognizer 追加（二重登録防止）
+            self.userIconImageView.isUserInteractionEnabled = true
+            if (self.userIconImageView.gestureRecognizers ?? []).isEmpty {
+                self.userIconImageView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.userIconImageViewTapped(_:))))
+            }
+
+            // ③ ターゲットユーザーの情報を取得（プロフィール画像セット）
+            self.getTargetInfo(target_id: self.appDelegate.live_target_user_id)
+
+            // ④ OnLiveUserInfo ダイアログ生成（未生成の場合のみ）
+            if self.userInfoDialog.superview == nil {
+                self.userInfoDialog = UINib(nibName: "OnLiveUserInfo", bundle: nil).instantiate(withOwner: self, options: nil)[0] as! OnLiveUserInfo
+                self.userInfoDialog.frame = self.view.frame
+                self.view.addSubview(self.userInfoDialog)
+                self.userInfoDialog.isHidden = true
             }
         }
     }
