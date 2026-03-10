@@ -1267,6 +1267,10 @@ extension WaitViewController: SkywaySessionDelegate {
             self.startConnection()
             // NewSDK: 旧SDK の DATACONNECTION_EVENT_OPEN で行っていたタイマー起動を補完
             if !self.timerLive.isValid {
+                if self.appDelegate.reserveStatus == "1" {
+                    self.appDelegate.reserveStatus = "2"
+                    print("[NewSDK] remoteConnectSucces: reserveStatus → 2")
+                }
                 self.appDelegate.count = 0
                 self.timerLive = Timer.scheduledTimer(timeInterval: 1.0,
                                                       target: self,
@@ -1282,7 +1286,8 @@ extension WaitViewController: SkywaySessionDelegate {
         // SkywayManager の操作（connectStart等）は行わない（memberDidLeave内のleaveRoomIfNeededと競合するため）
         // 再接続が必要な場合は connectEnd() 後に別途トリガーする
         isLiveConnectionStarted = false
-        print("[NewSDK] WaitViewController: connectDisconnect - isLiveConnectionStarted = false isSessionClosing=\(isSessionClosing)")
+        isNewSDKReadyForApproval = false
+        print("[NewSDK] WaitViewController: connectDisconnect - isLiveConnectionStarted=false isNewSDKReadyForApproval→false isSessionClosing=\(isSessionClosing)")
         // isSessionClosing が true のとき（status_listener==3 による強制leave中）は
         // commonWaitDo の Task 内で leaveRoomIfNeeded 完了後に setWaitState を行うため、ここではスキップ
         guard !isSessionClosing else {
