@@ -1546,7 +1546,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
                     self.castWaitDialog.get_user_photo_flg = (rawPhotoFlg as? Int) ?? Int("\(rawPhotoFlg ?? "")") ?? 0
                     self.castWaitDialog.get_user_photo_name = dict["user_photo_name"] as? String
 
-                    print("[WAITREQ][\(callId)] requestDialog pre-check cast_id=\(getCastId) user_id=\(getUserId) status=\(getStatus) user_name=\(self.castWaitDialog.get_user_name ?? "nil") photo_flg=\(self.castWaitDialog.get_user_photo_flg) isSkyWayReady=\(self.isSkyWayReady)")
+                    print("[WAITREQ][\(callId)] requestDialog pre-check cast_id=\(getCastId) user_id=\(getUserId) status=\(getStatus) user_name=\(self.castWaitDialog.get_user_name ?? "nil") photo_flg=\(self.castWaitDialog.get_user_photo_flg) isSkyWayReady=\(self.isSkyWayReady) waitState=\(self.waitState) isNewSDKReadyForApproval=\(self.isNewSDKReadyForApproval)")
 
                     // pendingRequest に保存（SkyWay状態に関わらず）
                     self.pendingRequest = (callId: callId, cast_id: getCastId, user_id: getUserId, status: getStatus, user_name: self.castWaitDialog.get_user_name, photo_flg: self.castWaitDialog.get_user_photo_flg, photo_name: self.castWaitDialog.get_user_photo_name)

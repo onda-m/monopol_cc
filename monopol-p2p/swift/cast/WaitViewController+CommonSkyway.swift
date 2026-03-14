@@ -1188,7 +1188,7 @@ extension WaitViewController {
         print("[NewSDK] startWaitingUsingNewSDK: conditionRef observer setup path=\(self.conditionRef.url)")
         self.handle = self.conditionRef.observe(.value, with: { [weak self] snap in
             guard let self = self else { return }
-            print("🔥 OBSERVER A START 🔥 conditionRef path=\(self.conditionRef.url) snap=\(snap)")
+            print("🔥 OBSERVER A START 🔥 conditionRef path=\(self.conditionRef.url) waitState=\(self.waitState) live_target=\(self.appDelegate.live_target_user_id) snap.exists=\(snap.exists())")
 
             if snap.exists() == false {
                 return
@@ -1280,7 +1280,7 @@ extension WaitViewController {
         // 待機開始準備中: 配信UIを非表示にし操作を無効化
         // sessionStart → connectSucces() で .waiting になる
         Task { @MainActor in
-            self.setWaitState(.stopping)
+            self.setWaitState(.starting)
         }
         // NewSDK チャット受信登録
         SkywayManager.sharedManager().onChatReceived = { [weak self] text in
