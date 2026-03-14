@@ -445,6 +445,7 @@ extension WaitViewController{
                 if self.useNewSDK {
                     let _errCallId = self.pendingRequest?.callId ?? "-"
                     print("[SKYWAY_ERR] PEER_EVENT_ERROR IGNORED(old sdk failure in new sdk mode) thread=\(Thread.isMainThread ? "MT" : "BG") cast_id=\(self.user_id) callId=\(_errCallId) error=\(error)")
+                    print("[CONNFAIL] waitState=\(self.waitState) isSkyWayReady=\(self.isSkyWayReady) isNewSDKReadyForApproval=\(self.isNewSDKReadyForApproval) isSessionClosing=\(self.isSessionClosing)")
                     UtilFunc.deleteCastLock(cast_id:self.user_id, user_id:self.user_id, type:1)
                     UtilFunc.deleteCastLock(cast_id:self.user_id, user_id:0, type:2)
                     return
@@ -1373,6 +1374,7 @@ extension WaitViewController: SkywaySessionDelegate {
         UtilFunc.deleteCastLock(cast_id: self.user_id, user_id: self.user_id, type: 1)
         UtilFunc.deleteCastLock(cast_id: self.user_id, user_id: 0, type: 2)
 
+        print("[READY][connectSucces] before isSkyWayReady=\(isSkyWayReady) isNewSDKReadyForApproval=\(isNewSDKReadyForApproval) waitState=\(waitState) peer=\(peer == nil ? "nil" : "exists")")
         print("[NewSDK] WaitViewController: connectSucces - 待機完了 isNewSDKReadyForApproval→true isSkyWayReady=\(isSkyWayReady) isPendingApproval=\(isPendingApproval)")
         isNewSDKReadyForApproval = true
         Task { @MainActor in
