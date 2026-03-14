@@ -205,6 +205,18 @@ extension WaitViewController{
         print("[NewSDK] sessionClose completed, transitioning to .idle")
         self.setWaitState(.idle)
 
+        // WORKAROUND: 自動再待機フロー（初回待機リフレッシュ）
+        if isAutoRestartingWait {
+            isAutoRestartingWait = false
+            print("[WORKAROUND] sessionClose completed, auto restarting startWaitingUsingNewSDK")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self = self else { return }
+                print("[WORKAROUND] calling startWaitingUsingNewSDK")
+                self.startWaitingUsingNewSDK()
+            }
+            return  // cancelWaitFlow は実行しない
+        }
+
         // cancelWait ボタン経由の場合のみ画面遷移を実行
         if isCancelWaitFlow {
             self.castWaitDialog.cancelWaitCompleted()
@@ -1377,6 +1389,20 @@ extension WaitViewController: SkywaySessionDelegate {
         print("[READY][connectSucces] before isSkyWayReady=\(isSkyWayReady) isNewSDKReadyForApproval=\(isNewSDKReadyForApproval) waitState=\(waitState) peer=\(peer == nil ? "nil" : "exists")")
         print("[NewSDK] WaitViewController: connectSucces - 待機完了 isNewSDKReadyForApproval→true isSkyWayReady=\(isSkyWayReady) isPendingApproval=\(isPendingApproval)")
         isNewSDKReadyForApproval = true
+
+        // WORKAROUND: 初回待機時のみ自動で待機解除→再待機を実行し状態同期をリフレッシュする
+        if useNewSDK && !didAutoRestartWaiting {
+            didAutoRestartWaiting = true
+            print("[WORKAROUND] auto restart waiting for first session sync waitState=\(waitState) isNewSDKReadyForApproval=\(isNewSDKReadyForApproval)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self = self else { return }
+                print("[WORKAROUND] executing sessionClose for auto restart")
+                self.isAutoRestartingWait = true
+                self.sessionClose()
+            }
+            return  // pending approval 処理はスキップ（再待機後の connectSucces で処理される）
+        }
+
         Task { @MainActor in
             self.setWaitState(.waiting)
             if self.isPendingApproval, let completion = self.pendingApprovalCompletion {
