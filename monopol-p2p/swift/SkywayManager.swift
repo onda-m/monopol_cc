@@ -271,21 +271,22 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         roomTask?.cancel()
         roomTask = nil
         Task { @MainActor in
+            // cleanupRoomResources (= detachRoomCallbacks) 完了を待ってから stream を解放
             await cleanupRoomResources(reason: "closeMedia")
+            self.localDataStream = nil
+            self.localAudioStream = nil
+            self.localVideoStream = nil
+            self.microphoneAudioSource = nil
+            self.cameraVideoSource = nil
+            self.dataSource = nil
+            self.cameraDevice = nil
+            self.remoteVideoStream = nil
+            self.remoteAudioStream = nil
+            self.remoteDataStream = nil
+            self.detachLocalVideo()
+            self.detachRemoteVideo()
+            self.sessionDelegate?.connectEnd()
         }
-        localDataStream = nil
-        localAudioStream = nil
-        localVideoStream = nil
-        microphoneAudioSource = nil
-        cameraVideoSource = nil
-        dataSource = nil
-        cameraDevice = nil
-        remoteVideoStream = nil
-        remoteAudioStream = nil
-        remoteDataStream = nil
-        detachLocalVideo()
-        detachRemoteVideo()
-        sessionDelegate?.connectEnd()
     }
 
     public func sessionClose() {

@@ -191,6 +191,17 @@ extension WaitViewController{
         sessionCloseTimeoutTask?.cancel()
         sessionCloseTimeoutTask = nil
 
+        // Firebase request node のクリーンアップ（前回データ残留防止）
+        self.rootRef.child(Util.INIT_FIREBASE + "/" + String(self.user_id)).removeValue()
+        print("[NewSDK] sessionClose: Firebase userrequest/\(self.user_id) removed")
+
+        // 状態フラグの完全リセット
+        isLiveConnectionStarted = false
+        isNewSDKReadyForApproval = false
+        isPendingApproval = false
+        pendingApprovalCompletion = nil
+        pendingRequest = nil
+
         print("[NewSDK] sessionClose completed, transitioning to .idle")
         self.setWaitState(.idle)
 
@@ -1139,6 +1150,15 @@ extension WaitViewController {
         sessionCloseTimeoutTask?.cancel()
         sessionCloseTimeoutTask = nil
 
+        // 再配信安定化のため全フラグリセット
+        isLiveConnectionStarted = false
+        isNewSDKReadyForApproval = false
+        isPendingApproval = false
+        pendingApprovalCompletion = nil
+        pendingRequest = nil
+        isReconnecting = false
+        reconnectRetryCount = 0
+
         // Firebase の前回配信データをリセット（status=99, room_name 等が残留する問題の防止）
         self.rootRef.child(Util.INIT_FIREBASE + "/" + String(self.user_id)).removeValue()
         self.castWaitDialog.status = 0
@@ -1345,6 +1365,7 @@ extension WaitViewController: SkywaySessionDelegate {
         }
     }
     func connectError() {
+        isLiveConnectionStarted = false
         setWaitState(.idle)
         print("[NewSDK] WaitViewController: connectError - 接続エラー isNewSDKReadyForApproval→false isSkyWayReady→false isPendingApproval=\(isPendingApproval)")
         DispatchQueue.main.async { [weak self] in

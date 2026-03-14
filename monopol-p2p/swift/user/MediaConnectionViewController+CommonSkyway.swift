@@ -1241,7 +1241,31 @@ extension MediaConnectionViewController: SkywaySessionDelegate {
         }
         self.addAudioSessionObservers()
     }
-    func connectDisconnect() { print("[NewSDK] MediaConnectionViewController: connectDisconnect room=\(self.targetRoomName) cast=\(self.liveCastId) user=\(self.user_id)") }
-    func connectEnd() { print("[NewSDK] MediaConnectionViewController: connectEnd room=\(self.targetRoomName) cast=\(self.liveCastId) user=\(self.user_id)") }
+    func connectDisconnect() {
+        print("[NewSDK] MediaConnectionViewController: connectDisconnect room=\(self.targetRoomName) cast=\(self.liveCastId) user=\(self.user_id)")
+        // Cast が退出 → Listener もルーム離脱 + ライブ終了処理
+        DispatchQueue.main.async {
+            UserDefaults.standard.set(0, forKey: "live_cast_id")
+            UserDefaults.standard.set("", forKey: "live_cast_name")
+            self.endLiveDoCommon()
+            Task { @MainActor in
+                await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "listener.connectDisconnect")
+                self.endLiveDo()
+            }
+        }
+    }
+    func connectEnd() {
+        print("[NewSDK] MediaConnectionViewController: connectEnd room=\(self.targetRoomName) cast=\(self.liveCastId) user=\(self.user_id)")
+        // Room が閉じられた → Listener もクリーンアップ + ライブ終了処理
+        DispatchQueue.main.async {
+            UserDefaults.standard.set(0, forKey: "live_cast_id")
+            UserDefaults.standard.set("", forKey: "live_cast_name")
+            self.endLiveDoCommon()
+            Task { @MainActor in
+                await SkywayManager.sharedManager().leaveRoomIfNeeded(reason: "listener.connectEnd")
+                self.endLiveDo()
+            }
+        }
+    }
     func connectError() { print("[NewSDK] MediaConnectionViewController: connectError room=\(self.targetRoomName) cast=\(self.liveCastId) user=\(self.user_id)") }
 }
