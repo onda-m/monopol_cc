@@ -1697,6 +1697,13 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     //予約は廃止
     func commonWaitDo(status:Int, shouldRestart: Bool = true){
         print("[WAIT][commonWaitDo] ENTER waitState=\(waitState) useNewSDK=\(useNewSDK) status=\(status) shouldRestart=\(shouldRestart) isSessionClosing=\(isSessionClosing) isLiveConnectionStarted=\(isLiveConnectionStarted) thread=\(Thread.isMainThread ? "MT" : "BG")")
+        // 二重実行ガード: OBSERVER A/B の両方が status_listener==3 で
+        // commonWaitDo を呼ぶため、1回目で removeAllSubviews 後に
+        // 2回目で countDownLabel が nil → クラッシュする問題を防止
+        if self.countDownLabel == nil {
+            print("[WAIT][commonWaitDo] SKIP: countDownLabel is nil (already cleaned up)")
+            return
+        }
         //待機状態へ
         //くるくる表示開始
         if(self.busyIndicator.isDescendant(of: self.view)){
