@@ -73,19 +73,14 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         logState("sessionStart.begin")
         print("[SkyMgr] sessionStart called")
         sessionDelegate = delegate
-        Task { @MainActor in
-            do {
-                try await setupContextIfNeeded()
-                if peerId.isEmpty {
-                    peerId = UUID().uuidString
-                }
-                print("[SkyMgr] sessionStart success, peerId=\(peerId)")
-                delegate.sessionStart()
-            } catch {
-                print("[SkyMgr] sessionStart error: \(error)")
-                delegate.connectError()
-            }
+        // Context setup は joinRoomIfNeeded 内の setupContextIfNeeded() で行う
+        // ここで setup すると roomName が未確定（"default"）のままトークンが発行され
+        // 初回 joinRoom で 403 insufficient permissions になる
+        if peerId.isEmpty {
+            peerId = UUID().uuidString
         }
+        print("[SkyMgr] sessionStart success, peerId=\(peerId)")
+        delegate.sessionStart()
     }
 
     @MainActor
