@@ -1177,6 +1177,106 @@ extension WaitViewController {
         self.appDelegate.live_target_user_name = ""
         self.appDelegate.live_target_user_id = 0
         print("[NewSDK][MVP] startWaitingUsingNewSDK: Firebase userrequest/\(self.user_id) removed")
+
+        // Firebase conditionRef observer を SkyWay 接続前に設定
+        // リスナーのリクエストは SkyWay 接続前に Firebase に書き込まれるため、
+        // ここで observer を登録しないと初回待機で取りこぼす
+        // 重複防止: 既存の handle を解除してから再登録
+        self.conditionRef.removeObserver(withHandle: self.handle)
+        self.conditionRef = self.rootRef.child(Util.INIT_FIREBASE + "/"
+            + String(self.user_id))
+        print("[NewSDK] startWaitingUsingNewSDK: conditionRef observer setup path=\(self.conditionRef.url)")
+        self.handle = self.conditionRef.observe(.value, with: { [weak self] snap in
+            guard let self = self else { return }
+            print("🔥 OBSERVER A START 🔥 conditionRef path=\(self.conditionRef.url) snap=\(snap)")
+
+            if snap.exists() == false {
+                return
+            }
+
+            guard let outer = snap.value as? [String: Any],
+                  let inner = outer.values.first as? [String: Any] else {
+                print("[WAIT] conditionRef: snap.value parse error, value=\(String(describing: snap.value))")
+                return
+            }
+            let dict = inner as NSDictionary
+
+            print("🚨 STATUS PARSE START 🚨")
+            guard let rawStatusListener = inner["status_listener"],
+                  let statusNumber = rawStatusListener as? NSNumber else {
+                print("[WAIT] conditionRef: status_listener missing or not NSNumber, raw=\(inner["status_listener"] as Any)")
+                return
+            }
+            let status_listener = statusNumber.intValue
+
+            print("[WAITREQ][CHECK] useNewSDK=\(self.useNewSDK) status_listener=\(status_listener)")
+            if self.useNewSDK && status_listener == 3 {
+                DispatchQueue.main.async {
+                    self.commonWaitDo(status: 1, shouldRestart: false)
+                    self.rootRef
+                        .child(Util.INIT_FIREBASE + "/" + String(self.user_id) + "/" + String(self.appDelegate.live_target_user_id))
+                        .removeValue()
+                }
+                return
+            }
+
+            if status_listener == 3 || status_listener == 4 {
+                self.commonWaitDo(status: 1)
+            } else if status_listener == 6 {
+                if self.appDelegate.count >= self.appDelegate.init_seconds - 10 {
+                    if self.appDelegate.reserveStatus == "5" {
+                        self.commonWaitDo(status: 8)
+                    } else {
+                        self.commonWaitDo(status: 1)
+                    }
+                } else {
+                    let data: [String: Any] = ["live_time": self.appDelegate.count, "status_listener": 7]
+                    self.conditionRef.updateChildValues(data)
+                    self.castWaitDialog.showMessageDo(message: "リスナーとの通信が回復しました。\nサシライブを続けてください。", font: 15)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                        self.castWaitDialog.delMessageDo()
+                    }
+                }
+                return
+            }
+
+            // 延長時のスターをゲット
+            let cast_add_star = (dict["cast_add_star"] as? Int) ?? 0
+            let cast_add_point = (dict["cast_add_point"] as? Int) ?? 0
+            if cast_add_star > 0 || cast_add_point > 0 {
+                let data: [String: Any] = ["cast_add_star": 0, "cast_add_point": 0]
+                self.conditionRef.updateChildValues(data)
+                self.getLivePoint(type: 3,
+                                 cast_id: self.user_id,
+                                 user_id: self.appDelegate.live_target_user_id,
+                                 point_num: cast_add_point,
+                                 star_num: cast_add_star,
+                                 live_count: 0,
+                                 seconds: Util.INIT_EX_UNIT_SECONDS,
+                                 re_star: 0,
+                                 action_flg: 1)
+                return
+            }
+
+            // プレゼントゲット
+            let present_star = (dict["present_star"] as? Int) ?? 0
+            let present_point = (dict["present_point"] as? Int) ?? 0
+            if present_star > 0 || present_point > 0 {
+                let data: [String: Any] = ["present_star": 0, "present_point": 0]
+                self.conditionRef.updateChildValues(data)
+                self.getLivePoint(type: 2,
+                                 cast_id: self.user_id,
+                                 user_id: self.appDelegate.live_target_user_id,
+                                 point_num: present_point,
+                                 star_num: present_star,
+                                 live_count: 0,
+                                 seconds: 0,
+                                 re_star: 0,
+                                 action_flg: 1)
+                return
+            }
+        })
+
         // 待機開始準備中: 配信UIを非表示にし操作を無効化
         // sessionStart → connectSucces() で .waiting になる
         Task { @MainActor in
@@ -1334,105 +1434,6 @@ extension WaitViewController: SkywaySessionDelegate {
 
             // ③ ターゲットユーザーの情報を取得（プロフィール画像セット）
             self.getTargetInfo(target_id: self.appDelegate.live_target_user_id)
-
-            // ⑤ NewSDK: Firebase conditionRef observer を設定
-            // 旧SDKでは setupDataConnectionCallbacks() 内 DATACONNECTION_EVENT_OPEN で行っていた処理
-            // present_star / present_point / cast_add_star 等の検出用
-            // 重複防止: 既存の handle を解除してから再登録
-            self.conditionRef.removeObserver(withHandle: self.handle)
-            self.conditionRef = self.rootRef.child(Util.INIT_FIREBASE + "/"
-                + String(self.user_id) + "/" + String(self.appDelegate.live_target_user_id))
-            print("[NewSDK] remoteConnectSucces: conditionRef observer setup path=\(self.conditionRef.url)")
-            self.handle = self.conditionRef.observe(.value, with: { [weak self] snap in
-                guard let self = self else { return }
-                print("🔥 OBSERVER A START 🔥 conditionRef path=\(self.conditionRef.url) snap=\(snap)")
-
-                if snap.exists() == false {
-                    return
-                }
-
-                guard let outer = snap.value as? [String: Any],
-                      let inner = outer.values.first as? [String: Any] else {
-                    print("[WAIT] conditionRef: snap.value parse error, value=\(String(describing: snap.value))")
-                    return
-                }
-                let dict = inner as NSDictionary
-
-                print("🚨 STATUS PARSE START 🚨")
-                guard let rawStatusListener = inner["status_listener"],
-                      let statusNumber = rawStatusListener as? NSNumber else {
-                    print("[WAIT] conditionRef: status_listener missing or not NSNumber, raw=\(inner["status_listener"] as Any)")
-                    return
-                }
-                let status_listener = statusNumber.intValue
-
-                print("[WAITREQ][CHECK] useNewSDK=\(self.useNewSDK) status_listener=\(status_listener)")
-                if self.useNewSDK && status_listener == 3 {
-                    DispatchQueue.main.async {
-                        self.commonWaitDo(status: 1, shouldRestart: false)
-                        self.rootRef
-                            .child(Util.INIT_FIREBASE + "/" + String(self.user_id) + "/" + String(self.appDelegate.live_target_user_id))
-                            .removeValue()
-                    }
-                    return
-                }
-
-                if status_listener == 3 || status_listener == 4 {
-                    self.commonWaitDo(status: 1)
-                } else if status_listener == 6 {
-                    if self.appDelegate.count >= self.appDelegate.init_seconds - 10 {
-                        if self.appDelegate.reserveStatus == "5" {
-                            self.commonWaitDo(status: 8)
-                        } else {
-                            self.commonWaitDo(status: 1)
-                        }
-                    } else {
-                        let data: [String: Any] = ["live_time": self.appDelegate.count, "status_listener": 7]
-                        self.conditionRef.updateChildValues(data)
-                        self.castWaitDialog.showMessageDo(message: "リスナーとの通信が回復しました。\nサシライブを続けてください。", font: 15)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-                            self.castWaitDialog.delMessageDo()
-                        }
-                    }
-                    return
-                }
-
-                // 延長時のスターをゲット
-                let cast_add_star = (dict["cast_add_star"] as? Int) ?? 0
-                let cast_add_point = (dict["cast_add_point"] as? Int) ?? 0
-                if cast_add_star > 0 || cast_add_point > 0 {
-                    let data: [String: Any] = ["cast_add_star": 0, "cast_add_point": 0]
-                    self.conditionRef.updateChildValues(data)
-                    self.getLivePoint(type: 3,
-                                     cast_id: self.user_id,
-                                     user_id: self.appDelegate.live_target_user_id,
-                                     point_num: cast_add_point,
-                                     star_num: cast_add_star,
-                                     live_count: 0,
-                                     seconds: Util.INIT_EX_UNIT_SECONDS,
-                                     re_star: 0,
-                                     action_flg: 1)
-                    return
-                }
-
-                // プレゼントゲット
-                let present_star = (dict["present_star"] as? Int) ?? 0
-                let present_point = (dict["present_point"] as? Int) ?? 0
-                if present_star > 0 || present_point > 0 {
-                    let data: [String: Any] = ["present_star": 0, "present_point": 0]
-                    self.conditionRef.updateChildValues(data)
-                    self.getLivePoint(type: 2,
-                                     cast_id: self.user_id,
-                                     user_id: self.appDelegate.live_target_user_id,
-                                     point_num: present_point,
-                                     star_num: present_star,
-                                     live_count: 0,
-                                     seconds: 0,
-                                     re_star: 0,
-                                     action_flg: 1)
-                    return
-                }
-            })
 
             // ④ OnLiveUserInfo ダイアログ生成（未生成の場合のみ）
             if self.userInfoDialog.superview == nil {
