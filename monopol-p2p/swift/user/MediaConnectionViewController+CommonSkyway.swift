@@ -1072,7 +1072,11 @@ extension MediaConnectionViewController{
     func sendAuto(text: String) {
         //print("送信した文字列")
         //print(text)
-        self.dataConnection?.send(text as NSObject)
+        if useNewSDK {
+            SkywayManager.sharedManager().sendData(text: text)
+        } else {
+            self.dataConnection?.send(text as NSObject)
+        }
         let message = Message(sender: Message.SenderType.send, text: text)
         //print(message.text as Any)
         //self.messages.insert(message, at: 0)
@@ -1159,7 +1163,11 @@ extension MediaConnectionViewController{
                 //プレゼントの送信(そのままの文字列を入れる。画像用のCellを使用するため)
                 send_text = text
             }
-            self.dataConnection?.send(send_text as NSObject)
+            if useNewSDK {
+                SkywayManager.sharedManager().sendData(text: send_text)
+            } else {
+                self.dataConnection?.send(send_text as NSObject)
+            }
             let message = Message(sender: Message.SenderType.send, text: send_text)
             //print(message.text as Any)
             //self.messages.insert(message, at: 0)
@@ -1170,12 +1178,12 @@ extension MediaConnectionViewController{
                 self.messageTableView.reloadData()
                 //self.messageTextField.text = nil
             }
-            
+
             //履歴保存
             UtilFunc.saveChatRireki(type:2, from_user_id:self.user_id, to_user_id:Int(self.liveCastId)!, present_id:0, chat_text:send_text, status:1)
         }
     }
-    
+
     /*
     ログを出すタイミングは、
     コイン残りが
@@ -1188,8 +1196,12 @@ extension MediaConnectionViewController{
         var send_text = ""
 
         send_text = "$$$_nocoin_" + String(coin)
-        
-        self.dataConnection?.send(send_text as NSObject)
+
+        if useNewSDK {
+            SkywayManager.sharedManager().sendData(text: send_text)
+        } else {
+            self.dataConnection?.send(send_text as NSObject)
+        }
         let message = Message(sender: Message.SenderType.send, text: send_text)
         //print(message.text as Any)
         //self.messages.insert(message, at: 0)

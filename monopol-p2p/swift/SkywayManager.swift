@@ -316,6 +316,22 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         attachRemoteVideo()
     }
 
+    /// NewSDK 経由でプレーンテキストを送信する（スタンプ・nocoin・auto 等、JSON ラップ不要の payload 用）
+    func sendData(text: String) {
+        Task { @MainActor in
+            guard let stream = self.localDataStream else {
+                print("[DATA][NEWSDK][SEND] SKIP localDataStream=nil text=\(String(text.prefix(20)))")
+                return
+            }
+            do {
+                try await stream.write(text)
+                print("[DATA][NEWSDK][SEND] result=ok len=\(text.count) textHead=\(String(text.prefix(30)))")
+            } catch {
+                print("[DATA][NEWSDK][SEND] result=error len=\(text.count) error=\(error)")
+            }
+        }
+    }
+
     /// NewSDK 経由でテキストを送信する（localDataStream が publish 済みであること）
     func sendChat(text: String) {
         Task { @MainActor in

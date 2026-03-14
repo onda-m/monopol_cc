@@ -1099,11 +1099,19 @@ extension WaitViewController{
         if(text.contains("画面リフレッシュ"))
         {
             isReconnect = true
-            self.dataConnection?.send(text as NSObject)
+            if useNewSDK {
+                SkywayManager.sharedManager().sendData(text: text)
+            } else {
+                self.dataConnection?.send(text as NSObject)
+            }
         }else if (!text.hasPrefix("$$$") && text != "") {
             print("送信した文字列")
             print(text)
-            self.dataConnection?.send(text as NSObject)
+            if useNewSDK {
+                SkywayManager.sharedManager().sendData(text: text)
+            } else {
+                self.dataConnection?.send(text as NSObject)
+            }
             let message = Message(sender: Message.SenderType.send, text: text)
             print(message.text as Any)
             //self.messages.insert(message, at: 0)
@@ -1128,10 +1136,14 @@ extension WaitViewController{
                 //スタンプの送信(そのままの文字列を入れる。画像用のCellを使用するため)
                 send_text = text
             }
-            self.dataConnection?.send(send_text as NSObject)
+            if useNewSDK {
+                SkywayManager.sharedManager().sendData(text: send_text)
+            } else {
+                self.dataConnection?.send(send_text as NSObject)
+            }
             let message = Message(sender: Message.SenderType.send, text: send_text)
             self.messages.insert(message, at: self.messages.count)//下から上に投稿を流す場合
-            
+
             //履歴保存
             UtilFunc.saveChatRireki(type:2, from_user_id:self.user_id, to_user_id:self.appDelegate.live_target_user_id, present_id:0, chat_text:send_text, status:1)
         }
@@ -1255,6 +1267,12 @@ extension WaitViewController: SkywaySessionDelegate {
         setWaitState(.waiting)
         SkywayManager.sharedManager().setWaitLocal(localView: localStreamView, delegate: self)
         SkywayManager.sharedManager().setRemoteView(remoteView: remoteStreamView)
+
+        // NewSDK: Room参加 + publish 完了後に CastLock を解除
+        // 旧SDKでは PEER_EVENT_OPEN (line 561,568) で行っていた処理
+        UtilFunc.deleteCastLock(cast_id: self.user_id, user_id: self.user_id, type: 1)
+        UtilFunc.deleteCastLock(cast_id: self.user_id, user_id: 0, type: 2)
+
         print("[NewSDK] WaitViewController: connectSucces - 待機完了 isNewSDKReadyForApproval→true isSkyWayReady=\(isSkyWayReady) isPendingApproval=\(isPendingApproval)")
         isNewSDKReadyForApproval = true
         Task { @MainActor in
@@ -1317,6 +1335,105 @@ extension WaitViewController: SkywaySessionDelegate {
             // ③ ターゲットユーザーの情報を取得（プロフィール画像セット）
             self.getTargetInfo(target_id: self.appDelegate.live_target_user_id)
 
+            // ⑤ NewSDK: Firebase conditionRef observer を設定
+            // 旧SDKでは setupDataConnectionCallbacks() 内 DATACONNECTION_EVENT_OPEN で行っていた処理
+            // present_star / present_point / cast_add_star 等の検出用
+            // 重複防止: 既存の handle を解除してから再登録
+            self.conditionRef.removeObserver(withHandle: self.handle)
+            self.conditionRef = self.rootRef.child(Util.INIT_FIREBASE + "/"
+                + String(self.user_id) + "/" + String(self.appDelegate.live_target_user_id))
+            print("[NewSDK] remoteConnectSucces: conditionRef observer setup path=\(self.conditionRef.url)")
+            self.handle = self.conditionRef.observe(.value, with: { [weak self] snap in
+                guard let self = self else { return }
+                print("🔥 OBSERVER A START 🔥 conditionRef path=\(self.conditionRef.url) snap=\(snap)")
+
+                if snap.exists() == false {
+                    return
+                }
+
+                guard let outer = snap.value as? [String: Any],
+                      let inner = outer.values.first as? [String: Any] else {
+                    print("[WAIT] conditionRef: snap.value parse error, value=\(String(describing: snap.value))")
+                    return
+                }
+                let dict = inner as NSDictionary
+
+                print("🚨 STATUS PARSE START 🚨")
+                guard let rawStatusListener = inner["status_listener"],
+                      let statusNumber = rawStatusListener as? NSNumber else {
+                    print("[WAIT] conditionRef: status_listener missing or not NSNumber, raw=\(inner["status_listener"] as Any)")
+                    return
+                }
+                let status_listener = statusNumber.intValue
+
+                print("[WAITREQ][CHECK] useNewSDK=\(self.useNewSDK) status_listener=\(status_listener)")
+                if self.useNewSDK && status_listener == 3 {
+                    DispatchQueue.main.async {
+                        self.commonWaitDo(status: 1, shouldRestart: false)
+                        self.rootRef
+                            .child(Util.INIT_FIREBASE + "/" + String(self.user_id) + "/" + String(self.appDelegate.live_target_user_id))
+                            .removeValue()
+                    }
+                    return
+                }
+
+                if status_listener == 3 || status_listener == 4 {
+                    self.commonWaitDo(status: 1)
+                } else if status_listener == 6 {
+                    if self.appDelegate.count >= self.appDelegate.init_seconds - 10 {
+                        if self.appDelegate.reserveStatus == "5" {
+                            self.commonWaitDo(status: 8)
+                        } else {
+                            self.commonWaitDo(status: 1)
+                        }
+                    } else {
+                        let data: [String: Any] = ["live_time": self.appDelegate.count, "status_listener": 7]
+                        self.conditionRef.updateChildValues(data)
+                        self.castWaitDialog.showMessageDo(message: "リスナーとの通信が回復しました。\nサシライブを続けてください。", font: 15)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                            self.castWaitDialog.delMessageDo()
+                        }
+                    }
+                    return
+                }
+
+                // 延長時のスターをゲット
+                let cast_add_star = (dict["cast_add_star"] as? Int) ?? 0
+                let cast_add_point = (dict["cast_add_point"] as? Int) ?? 0
+                if cast_add_star > 0 || cast_add_point > 0 {
+                    let data: [String: Any] = ["cast_add_star": 0, "cast_add_point": 0]
+                    self.conditionRef.updateChildValues(data)
+                    self.getLivePoint(type: 3,
+                                     cast_id: self.user_id,
+                                     user_id: self.appDelegate.live_target_user_id,
+                                     point_num: cast_add_point,
+                                     star_num: cast_add_star,
+                                     live_count: 0,
+                                     seconds: Util.INIT_EX_UNIT_SECONDS,
+                                     re_star: 0,
+                                     action_flg: 1)
+                    return
+                }
+
+                // プレゼントゲット
+                let present_star = (dict["present_star"] as? Int) ?? 0
+                let present_point = (dict["present_point"] as? Int) ?? 0
+                if present_star > 0 || present_point > 0 {
+                    let data: [String: Any] = ["present_star": 0, "present_point": 0]
+                    self.conditionRef.updateChildValues(data)
+                    self.getLivePoint(type: 2,
+                                     cast_id: self.user_id,
+                                     user_id: self.appDelegate.live_target_user_id,
+                                     point_num: present_point,
+                                     star_num: present_star,
+                                     live_count: 0,
+                                     seconds: 0,
+                                     re_star: 0,
+                                     action_flg: 1)
+                    return
+                }
+            })
+
             // ④ OnLiveUserInfo ダイアログ生成（未生成の場合のみ）
             if self.userInfoDialog.superview == nil {
                 self.userInfoDialog = UINib(nibName: "OnLiveUserInfo", bundle: nil).instantiate(withOwner: self, options: nil)[0] as! OnLiveUserInfo
@@ -1367,6 +1484,9 @@ extension WaitViewController: SkywaySessionDelegate {
     func connectError() {
         isLiveConnectionStarted = false
         setWaitState(.idle)
+        // 旧SDKでは PEER_EVENT_ERROR でも deleteCastLock を呼んでいた (line 448-449, 461-469)
+        UtilFunc.deleteCastLock(cast_id: self.user_id, user_id: self.user_id, type: 1)
+        UtilFunc.deleteCastLock(cast_id: self.user_id, user_id: 0, type: 2)
         print("[NewSDK] WaitViewController: connectError - 接続エラー isNewSDKReadyForApproval→false isSkyWayReady→false isPendingApproval=\(isPendingApproval)")
         DispatchQueue.main.async { [weak self] in
             self?.isNewSDKReadyForApproval = false
