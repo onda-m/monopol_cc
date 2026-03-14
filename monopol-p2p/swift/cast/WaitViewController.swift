@@ -117,10 +117,6 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     var isPendingApproval: Bool = false
     /// 承認待ち中のcompletion
     var pendingApprovalCompletion: (() -> Void)?
-    /// 初回待機の自動再待機済みフラグ（無限ループ防止）
-    var didAutoRestartWaiting: Bool = false
-    /// 自動再待機中フラグ（sessionClose完了後に自動でstartWaitingUsingNewSDKを呼ぶ）
-    var isAutoRestartingWait: Bool = false
     /// SkyWay再接続中フラグ（多重発火防止）
     var isReconnecting: Bool = false
     /// 再接続リトライ回数（setupSkyWayReconnect内で使用）
