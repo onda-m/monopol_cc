@@ -1400,6 +1400,7 @@ extension WaitViewController: SkywaySessionDelegate {
         }
     }
     func remoteConnectSucces() {
+        print("[FLOW][L4] remoteConnectSucces ENTER isLiveConnectionStarted=\(isLiveConnectionStarted) waitState=\(waitState) live_target_user_id=\(appDelegate.live_target_user_id) isNewSDKReadyForApproval=\(isNewSDKReadyForApproval) isSkyWayReady=\(isSkyWayReady)")
         print("[NewSDK] WaitViewController: remoteConnectSucces - ユーザーが参加しました")
         // 多重実行ガード
         guard !isLiveConnectionStarted else {

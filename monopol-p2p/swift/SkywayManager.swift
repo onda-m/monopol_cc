@@ -744,9 +744,14 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     func room(_ room: Room, memberDidJoin member: RoomMember) {
         Task { @MainActor in
+            let memberId = self.memberIdentifier(member)
+            let localId = self.localMember.map { self.localMemberIdentifier($0) } ?? "nil"
+            let isRemote = memberId != localId
+            print("[FLOW][L7] memberDidJoin memberId=\(memberId) localId=\(localId) isRemote=\(isRemote) delegatesAttached=\(self.delegatesAttached) localMember=\(self.localMember == nil ? "nil" : "exists") roomId=\(room.id)")
             guard self.delegatesAttached else { return }
             guard let localMember = self.localMember else { return }
             if self.memberIdentifier(member) != self.localMemberIdentifier(localMember) {
+                print("[FLOW][L7] calling remoteConnectSucces")
                 self.sessionDelegate?.remoteConnectSucces()
             }
         }
