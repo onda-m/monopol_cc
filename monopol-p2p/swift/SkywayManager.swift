@@ -36,6 +36,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     private var cameraVideoSource: CameraVideoSource?
     private var dataSource: DataSource?
     private var cameraDevice: AVCaptureDevice?
+    private var capturingSucceeded: Bool = false
     private var contextSetupDone: Bool = false
     private var remoteVideoStream: RemoteVideoStream?
     private var remoteAudioStream: RemoteAudioStream?
@@ -241,6 +242,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         isConnectStarted = true
         sessionDelegate = delegate
         roomClosed = false
+        delegatesAttached = false  // 【5】再join時に attachRoomCallbacks が確実に実行されるようリセット
         print("[SkyMgr] roomClosed set to false reason=connectStart")
         subscribedPublicationIds.removeAll()  // リセット
         roomTask?.cancel()
@@ -273,6 +275,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             self.localVideoStream = nil
             self.microphoneAudioSource = nil
             self.cameraVideoSource = nil
+            self.capturingSucceeded = false
             self.dataSource = nil
             self.cameraDevice = nil
             self.remoteVideoStream = nil
@@ -351,6 +354,13 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             print("[SkyMgr] joinRoomIfNeeded skipped: roomClosed=true")
             return
         }
+
+        // 【1】再join安全化: 旧セッションが残存していたら完全破棄してからjoin
+        if room != nil || localMember != nil {
+            print("[SkyMgr] joinRoomIfNeeded: stale session detected (room=\(room != nil) localMember=\(localMember != nil)), cleaning up first")
+            await detachRoomCallbacks(reason: "joinRoomIfNeeded.staleCleanup")
+        }
+
         do {
             print("[SkyMgr] joinRoomIfNeeded START thread=\(Thread.isMainThread ? "MT" : "BG") roomName=\(roomName) memberName=\(memberName)")
             tokenRoomNameForContextSetup = roomName
@@ -386,10 +396,11 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         delegatesAttached = true
         print("[SkyMgr] attachRoomCallbacks start")
 
-        // Set room delegate
+        // 【2】delegate 多重登録防止: 必ず nil → self の順で設定
+        room.delegate = nil
         room.delegate = self
 
-        // Set localMember delegate
+        localMember.delegate = nil
         localMember.delegate = self
 
         // Set delegates for existing publications we own
@@ -492,6 +503,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         localVideoStream = nil
         localAudioStream = nil
         localDataStream = nil
+        capturingSucceeded = false
         print("[SkyMgr] local streams cleared")
 
         // (6) Clear references and reset guards
@@ -521,53 +533,85 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     @MainActor
     private func publishLocalStreams(localMember: LocalRoomMember) async throws {
-        print("[SkyMgr][publish] start")
+        print("[SkyMgr][publish] start audioStream=\(localAudioStream != nil) videoStream=\(localVideoStream != nil) dataStream=\(localDataStream != nil) capturingOK=\(capturingSucceeded)")
         await prepareLocalStreamsIfNeeded()
+        print("[SkyMgr][publish] afterPrepare audioStream=\(localAudioStream != nil) videoStream=\(localVideoStream != nil) dataStream=\(localDataStream != nil) capturingOK=\(capturingSucceeded)")
         if let localAudioStream = localAudioStream {
             let pub = try await localMember.publish(localAudioStream, options: RoomPublicationOptions())
             pub.delegate = self
             roomPublications[pub.id] = pub
             print("[SkyMgr][publish] audio ok pubId=\(pub.id)")
+        } else {
+            print("[SkyMgr][publish] audio SKIP stream=nil")
         }
-        if let localVideoStream = localVideoStream {
+        if let localVideoStream = localVideoStream, capturingSucceeded {
             let pub = try await localMember.publish(localVideoStream, options: RoomPublicationOptions())
             pub.delegate = self
             roomPublications[pub.id] = pub
             print("[SkyMgr][publish] video ok pubId=\(pub.id)")
+        } else {
+            print("[SkyMgr][publish] video SKIP stream=\(localVideoStream != nil) capturingOK=\(capturingSucceeded)")
         }
         if let localDataStream = localDataStream {
             let pub = try await localMember.publish(localDataStream, options: RoomPublicationOptions())
             pub.delegate = self
             roomPublications[pub.id] = pub
             print("[CHAT][NEWSDK] localDataStream published pubId=\(pub.id)")
+        } else {
+            print("[SkyMgr][publish] data SKIP stream=nil")
         }
         print("[SkyMgr][publish] complete total=\(roomPublications.count)")
     }
 
+    /// 【3】capturingSucceeded を唯一の video 判定基準とする
+    /// startCapturing 成功時のみ createStream() を呼ぶ（nil track crash 防止）
     @MainActor
     private func prepareLocalStreamsIfNeeded() async {
+        // --- Audio ---
         if localAudioStream == nil {
             if microphoneAudioSource == nil {
                 microphoneAudioSource = MicrophoneAudioSource()
             }
             localAudioStream = microphoneAudioSource?.createStream()
+            print("[SkyMgr][prepare] audio: source=\(microphoneAudioSource != nil) stream=\(localAudioStream != nil)")
         }
-        if localVideoStream == nil {
-            let cameraVideoSource = cameraVideoSource ?? CameraVideoSource.shared()
-            self.cameraVideoSource = cameraVideoSource
+
+        // --- Video: capturingSucceeded が true なら再生成不要 ---
+        if !capturingSucceeded {
+            // 前回の失敗 stream を破棄（nil track の可能性がある）
+            localVideoStream = nil
+
+            let source = cameraVideoSource ?? CameraVideoSource.shared()
+            self.cameraVideoSource = source
             if cameraDevice == nil {
                 cameraDevice = CameraVideoSource.supportedCameras().first(where: { $0.position == .front })
             }
-            if let cameraDevice = cameraDevice {
-                try? await cameraVideoSource.startCapturing(with: cameraDevice, options: nil)
-                localVideoStream = cameraVideoSource.createStream()
+            print("[SkyMgr][prepare] video: cameraDevice=\(cameraDevice != nil) capturingSucceeded=\(capturingSucceeded)")
+            if let device = cameraDevice {
+                do {
+                    try await source.startCapturing(with: device, options: nil)
+                    capturingSucceeded = true
+                    localVideoStream = source.createStream()
+                    print("[SkyMgr][prepare] video: startCapturing OK stream=\(localVideoStream != nil)")
+                } catch {
+                    capturingSucceeded = false
+                    localVideoStream = nil
+                    print("[SkyMgr][prepare] video: startCapturing FAILED error=\(error) — createStream SKIPPED")
+                }
+            } else {
+                capturingSucceeded = false
+                localVideoStream = nil
+                print("[SkyMgr][prepare] video: SKIP no cameraDevice available")
             }
         }
+
+        // --- Data ---
         if localDataStream == nil {
             if dataSource == nil {
                 dataSource = DataSource()
             }
             localDataStream = dataSource?.createStream()
+            print("[SkyMgr][prepare] data: source=\(dataSource != nil) stream=\(localDataStream != nil)")
         }
     }
 
@@ -674,9 +718,14 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         }
     }
 
+    /// 【6】attachRemoteVideo: remoteVideoStream nil guard 追加
     private func attachRemoteVideo() {
         guard let remoteContainerView = remoteContainerView else {
             print("[SkyMgr] attachRemoteVideo: remoteContainerView=nil, skip")
+            return
+        }
+        guard let stream = remoteVideoStream else {
+            print("[SkyMgr] attachRemoteVideo: remoteVideoStream=nil, skip")
             return
         }
         guard Thread.isMainThread else {
@@ -684,7 +733,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             return
         }
         remoteContainerView.layoutIfNeeded()
-        print("[SkyMgr] attachRemoteVideo: main=\(Thread.isMainThread) frame=\(remoteContainerView.frame) hidden=\(remoteContainerView.isHidden) alpha=\(remoteContainerView.alpha) superview=\(remoteContainerView.superview != nil) window=\(remoteContainerView.window != nil)")
+        print("[SkyMgr] attachRemoteVideo: frame=\(remoteContainerView.frame) hidden=\(remoteContainerView.isHidden) superview=\(remoteContainerView.superview != nil)")
         if remoteVideoView == nil {
             remoteVideoView = VideoView(frame: remoteContainerView.bounds)
             if let remoteVideoView = remoteVideoView {
@@ -692,8 +741,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
                 remoteContainerView.addSubview(remoteVideoView)
             }
         }
-        if let remoteVideoStream = remoteVideoStream, let remoteVideoView = remoteVideoView {
-            remoteVideoStream.attach(remoteVideoView)
+        if let remoteVideoView = remoteVideoView {
+            stream.attach(remoteVideoView)
         }
     }
 
@@ -787,12 +836,31 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         }
     }
 
+    /// 【7】didUnpublishStreamOf: remote stream クリア追加
     func room(_ room: Room, didUnpublishStreamOf publication: RoomPublication) {
         Task { @MainActor in
             guard self.delegatesAttached else { return }
             let pubId = publication.id
-            print("[SkyMgr] didUnpublishStreamOf pubId=\(pubId)")
-            // Remote unpublished; subscription will be canceled automatically
+            let contentType = publication.contentType
+            print("[SkyMgr] didUnpublishStreamOf pubId=\(pubId) contentType=\(contentType)")
+
+            // contentType に応じて remote stream を確実にクリア
+            switch contentType {
+            case .video:
+                self.detachRemoteVideo()
+                self.remoteVideoStream = nil
+                print("[SkyMgr] didUnpublishStreamOf: remoteVideoStream cleared")
+            case .audio:
+                self.remoteAudioStream = nil
+                print("[SkyMgr] didUnpublishStreamOf: remoteAudioStream cleared")
+            case .data:
+                self.remoteDataStream?.delegate = nil
+                self.remoteDataStream = nil
+                print("[SkyMgr] didUnpublishStreamOf: remoteDataStream cleared")
+            @unknown default:
+                break
+            }
+
             // Clean up associated subscription and subscribedPublicationIds
             self.subscribedPublicationIds.remove(pubId)
             for (subId, sub) in self.roomSubscriptions {
