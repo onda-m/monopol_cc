@@ -62,11 +62,86 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     private var tokenRoomNameForContextSetup: String = "default"
 
+    /// バックグラウンド遷移で video を unpublish 済みかどうか
+    private var videoUnpublishedForBackground: Bool = false
+
     class func sharedManager() -> SkywayManager {
         if (instance == nil) {
             instance = SkywayManager()
+            instance!.registerAppLifecycleObservers()
         }
         return instance!
+    }
+
+    /// バックグラウンド/フォアグラウンド通知を登録
+    /// iOS がバックグラウンドでカメラを停止すると track が invalid になり sender.cpp:78 crash する
+    private func registerAppLifecycleObservers() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appWillEnterForeground),
+            name: UIApplication.willEnterForegroundNotification,
+            object: nil
+        )
+    }
+
+    /// バックグラウンド遷移時: video publication を unpublish して track 参照を安全に切る
+    @objc private func appDidEnterBackground() {
+        print("[SkyMgr][lifecycle] appDidEnterBackground: unpublishing video to prevent track crash")
+        Task { @MainActor in
+            await self.unpublishVideoIfNeeded()
+            self.videoUnpublishedForBackground = true
+        }
+    }
+
+    /// フォアグラウンド復帰時: camera を再 capture して video を再 publish
+    @objc private func appWillEnterForeground() {
+        print("[SkyMgr][lifecycle] appWillEnterForeground: recapturing video")
+        Task { @MainActor in
+            guard self.videoUnpublishedForBackground else { return }
+            self.videoUnpublishedForBackground = false
+            await self.recaptureAndRepublishVideo()
+        }
+    }
+
+    /// video publication を unpublish + 状態リセット
+    @MainActor
+    private func unpublishVideoIfNeeded() async {
+        for (pubId, pub) in roomPublications where pub.contentType == .video {
+            do {
+                try await localMember?.unpublish(publicationId: pubId)
+                print("[SkyMgr][lifecycle] video unpublished pubId=\(pubId)")
+            } catch {
+                print("[SkyMgr][lifecycle] video unpublish error pubId=\(pubId) error=\(error)")
+            }
+            pub.delegate = nil
+            roomPublications.removeValue(forKey: pubId)
+        }
+        resetVideoStateIfNeeded()
+    }
+
+    /// camera 再 capture → video 再 publish（フォアグラウンド復帰用）
+    @MainActor
+    private func recaptureAndRepublishVideo() async {
+        guard let localMember = localMember else {
+            print("[SkyMgr][lifecycle] recapture: localMember=nil, skip")
+            return
+        }
+        guard !roomClosed else {
+            print("[SkyMgr][lifecycle] recapture: roomClosed=true, skip")
+            return
+        }
+        await prepareLocalStreamsIfNeeded()
+        let ok = await safePublishVideo(localMember: localMember)
+        print("[SkyMgr][lifecycle] recapture result=\(ok) capturingOK=\(capturingSucceeded) stream=\(localVideoStream != nil)")
+        if ok {
+            attachLocalVideo()
+        }
     }
 
     // MARK: Session
@@ -581,26 +656,37 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     @MainActor
     private func publishLocalStreams(localMember: LocalRoomMember) async throws {
-        print("[SkyMgr][publish] start audioStream=\(localAudioStream != nil) videoStream=\(localVideoStream != nil) dataStream=\(localDataStream != nil) capturingOK=\(capturingSucceeded)")
+        print("[SkyMgr][publish] start audioStream=\(localAudioStream != nil) videoStream=\(localVideoStream != nil) dataStream=\(localDataStream != nil) capturingOK=\(capturingSucceeded) bgUnpublished=\(videoUnpublishedForBackground)")
         await prepareLocalStreamsIfNeeded()
         print("[SkyMgr][publish] afterPrepare audioStream=\(localAudioStream != nil) videoStream=\(localVideoStream != nil) dataStream=\(localDataStream != nil) capturingOK=\(capturingSucceeded)")
+        // --- Audio ---
         if let localAudioStream = localAudioStream {
-            let pub = try await localMember.publish(localAudioStream, options: RoomPublicationOptions())
-            pub.delegate = self
-            roomPublications[pub.id] = pub
-            print("[SkyMgr][publish] audio ok pubId=\(pub.id)")
+            do {
+                let pub = try await localMember.publish(localAudioStream, options: RoomPublicationOptions())
+                pub.delegate = self
+                roomPublications[pub.id] = pub
+                print("[SkyMgr][publish] audio ok pubId=\(pub.id)")
+            } catch {
+                print("[SkyMgr][publish] audio FAILED error=\(error)")
+            }
         } else {
             print("[SkyMgr][publish] audio SKIP stream=nil")
         }
+        // --- Video: safePublishVideo のみ（直接 publish 禁止）---
         let videoOk = await safePublishVideo(localMember: localMember)
         if !videoOk {
             print("[SkyMgr][publish] video SKIP by safePublishVideo gate")
         }
+        // --- Data ---
         if let localDataStream = localDataStream {
-            let pub = try await localMember.publish(localDataStream, options: RoomPublicationOptions())
-            pub.delegate = self
-            roomPublications[pub.id] = pub
-            print("[CHAT][NEWSDK] localDataStream published pubId=\(pub.id)")
+            do {
+                let pub = try await localMember.publish(localDataStream, options: RoomPublicationOptions())
+                pub.delegate = self
+                roomPublications[pub.id] = pub
+                print("[CHAT][NEWSDK] localDataStream published pubId=\(pub.id)")
+            } catch {
+                print("[SkyMgr][publish] data FAILED error=\(error)")
+            }
         } else {
             print("[SkyMgr][publish] data SKIP stream=nil")
         }
