@@ -721,34 +721,39 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         print("[SkyMgr][publish] afterPrepare localTracksReady=\(localTracksReady) audioStream=\(localAudioStream != nil) videoStream=\(localVideoStream != nil) dataStream=\(localDataStream != nil) capturingOK=\(capturingSucceeded)")
         // --- Audio ---
         if let localAudioStream = localAudioStream {
+            print("[SkyMgr][publish][AUDIO] >>> CALLING localMember.publish(audio) micSource=\(microphoneAudioSource != nil)")
             do {
                 let pub = try await localMember.publish(localAudioStream, options: RoomPublicationOptions())
                 pub.delegate = self
                 roomPublications[pub.id] = pub
-                print("[SkyMgr][publish] audio ok pubId=\(pub.id)")
+                print("[SkyMgr][publish][AUDIO] <<< SUCCESS pubId=\(pub.id)")
             } catch {
-                print("[SkyMgr][publish] audio FAILED error=\(error)")
+                print("[SkyMgr][publish][AUDIO] <<< FAILED error=\(error)")
             }
         } else {
-            print("[SkyMgr][publish] audio SKIP stream=nil")
+            print("[SkyMgr][publish][AUDIO] SKIP stream=nil")
         }
         // --- Video: safePublishVideo のみ（直接 publish 禁止）---
+        print("[SkyMgr][publish][VIDEO] >>> CALLING safePublishVideo")
         let videoOk = await safePublishVideo(localMember: localMember)
         if !videoOk {
-            print("[SkyMgr][publish] video SKIP by safePublishVideo gate")
+            print("[SkyMgr][publish][VIDEO] <<< SKIP by safePublishVideo gate")
+        } else {
+            print("[SkyMgr][publish][VIDEO] <<< OK")
         }
         // --- Data ---
         if let localDataStream = localDataStream {
+            print("[SkyMgr][publish][DATA] >>> CALLING localMember.publish(data) dataSource=\(dataSource != nil)")
             do {
                 let pub = try await localMember.publish(localDataStream, options: RoomPublicationOptions())
                 pub.delegate = self
                 roomPublications[pub.id] = pub
-                print("[CHAT][NEWSDK] localDataStream published pubId=\(pub.id)")
+                print("[SkyMgr][publish][DATA] <<< SUCCESS pubId=\(pub.id)")
             } catch {
-                print("[SkyMgr][publish] data FAILED error=\(error)")
+                print("[SkyMgr][publish][DATA] <<< FAILED error=\(error)")
             }
         } else {
-            print("[SkyMgr][publish] data SKIP stream=nil")
+            print("[SkyMgr][publish][DATA] SKIP stream=nil")
         }
         print("[SkyMgr][publish] complete total=\(roomPublications.count)")
     }
