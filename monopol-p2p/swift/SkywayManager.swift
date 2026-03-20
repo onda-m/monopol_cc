@@ -549,6 +549,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             pub.delegate = self
             roomPublications[pub.id] = pub
             print("[SkyMgr][publish] video ok pubId=\(pub.id)")
+            // publish 成功後にプレビューを再 attach（setWaitLocal 時に stream が nil で黒画面だった場合の修復）
+            attachLocalVideo()
         } else {
             print("[SkyMgr][publish] video SKIP stream=\(localVideoStream != nil) capturingOK=\(capturingSucceeded)")
         }
@@ -705,7 +707,10 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     private func attachLocalVideo() {
-        guard let localContainerView = localContainerView else { return }
+        guard let localContainerView = localContainerView else {
+            print("[SkyMgr] attachLocalVideo: localContainerView=nil, skip")
+            return
+        }
         if localVideoView == nil {
             localVideoView = VideoView(frame: localContainerView.bounds)
             if let localVideoView = localVideoView {
@@ -715,6 +720,9 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         }
         if let localVideoStream = localVideoStream, let localVideoView = localVideoView {
             localVideoStream.attach(localVideoView)
+            print("[SkyMgr] attachLocalVideo: stream attached to view OK")
+        } else {
+            print("[SkyMgr] attachLocalVideo: SKIP stream=\(localVideoStream != nil) view=\(localVideoView != nil) capturingOK=\(capturingSucceeded)")
         }
     }
 

@@ -1156,6 +1156,19 @@ extension WaitViewController {
 
     func startWaitingUsingNewSDK() {
         print("[NewSDK][MVP] startWaitingUsingNewSDK ENTER waitState=\(waitState) isSessionClosing=\(isSessionClosing) isLiveConnectionStarted=\(isLiveConnectionStarted) thread=\(Thread.isMainThread ? "MT" : "BG")")
+
+        // 配信ポイント(累計)の初期化（旧SDKでは setWait() 内で行っていた処理）
+        if self.livePointLbl != nil {
+            if UserDefaults.standard.object(forKey: "myLivePoint") != nil {
+                let myLivePoint = UserDefaults.standard.integer(forKey: "myLivePoint")
+                self.livePointLbl.text = String(UtilFunc.numFormatter(num: myLivePoint)) + " pt"
+            } else {
+                self.livePointLbl.text = "- pt"
+            }
+            self.livePointLbl.adjustsFontSizeToFitWidth = true
+            self.livePointLbl.minimumScaleFactor = 0.3
+        }
+
         // 新しい待機サイクルのためフラグリセット
         isSessionClosing = false
         sessionCloseCompletedOnce = false
