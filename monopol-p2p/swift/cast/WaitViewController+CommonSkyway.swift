@@ -321,7 +321,7 @@ extension WaitViewController{
             return
         }
         let option = SKWCallOption()
-
+        print("[PUBTRACE] file=WaitVC+CommonSkyway func=call kind=peer.call useNewSDK=\(useNewSDK) localStream=\(self.appDelegate.localStream != nil) targetPeerId=\(targetPeerId) BEFORE")
         if let mediaConnection = peer.call(withId: targetPeerId, stream: self.appDelegate.localStream, options: option){
             self.mediaConnection = mediaConnection
             self.setupMediaConnectionCallbacks(mediaConnection: mediaConnection)
@@ -577,6 +577,7 @@ extension WaitViewController{
         // MARK: PEER_EVENT_CONNECTION
         //通話コールされた時に呼ばれる
         peer.on(SKWPeerEventEnum.PEER_EVENT_CALL, callback: { (obj) -> Void in
+            print("[PUBTRACE] file=WaitVC+CommonSkyway func=PEER_EVENT_CALL kind=media_answer useNewSDK=\(self.useNewSDK) peer=\(self.peer != nil) localStream=\(self.appDelegate.localStream != nil) BEFORE")
             print("[SKYWAY][CALL] PEER_EVENT_CALL: objType=\(type(of: obj))")
             if let connection = obj as? SKWMediaConnection{
                 //カメラなしのリスナーを考慮しコールバック処理はsetupDataConnectionCallbacksへ移動
@@ -584,6 +585,7 @@ extension WaitViewController{
                 //ただし異常終了時のコールバックのみ使用する
                 self.setupMediaConnectionCallbacks(mediaConnection: connection)
                 self.mediaConnection = connection
+                print("[PUBTRACE] file=WaitVC+CommonSkyway func=PEER_EVENT_CALL kind=connection.answer useNewSDK=\(self.useNewSDK) localStream=\(self.appDelegate.localStream != nil) CALLING")
                 connection.answer(self.appDelegate.localStream)
                 
                 /*
