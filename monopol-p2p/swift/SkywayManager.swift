@@ -788,20 +788,22 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     @MainActor
     private func handleStreamAttachment(subscription: RoomSubscription) {
+        // stream=nil の場合は即 return（SDK内部 publish 誘発による crash 防止）
+        // 「will attach later」ロジックは完全禁止
         guard let stream = subscription.stream else {
-            print("[SkyMgr] handleStreamAttachment: stream is nil, will attach on didAttach event, subId=\(subscription.id)")
+            print("[SkyMgr][attach] BLOCK: stream=nil subId=\(subscription.id) → attach禁止（crash防止）")
             return
         }
         if let videoStream = stream as? RemoteVideoStream {
-            print("[SkyMgr] handleStreamAttachment: attaching remote video, subId=\(subscription.id)")
+            print("[SkyMgr][attach] remote video OK subId=\(subscription.id)")
             remoteVideoStream = videoStream
             attachRemoteVideo()
             sessionDelegate?.remoteConnectSucces()
         } else if let audioStream = stream as? RemoteAudioStream {
-            print("[SkyMgr] handleStreamAttachment: attaching remote audio, subId=\(subscription.id)")
+            print("[SkyMgr][attach] remote audio OK subId=\(subscription.id)")
             remoteAudioStream = audioStream
         } else if let dataStream = stream as? RemoteDataStream {
-            print("[CHAT][NEWSDK] handleStreamAttachment: attaching remote data, subId=\(subscription.id)")
+            print("[SkyMgr][attach] remote data OK subId=\(subscription.id)")
             remoteDataStream = dataStream
             dataStream.delegate = self
         }
@@ -836,7 +838,12 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     private func attachLocalVideo() {
         guard let localContainerView = localContainerView else {
-            print("[SkyMgr] attachLocalVideo: localContainerView=nil, skip")
+            print("[SkyMgr][attachLocalVideo] BLOCK: localContainerView=nil")
+            return
+        }
+        // stream が nil の場合は attach 禁止（VideoView 作成もスキップ）
+        guard let stream = localVideoStream else {
+            print("[SkyMgr][attachLocalVideo] BLOCK: localVideoStream=nil capturingOK=\(capturingSucceeded)")
             return
         }
         if localVideoView == nil {
@@ -846,11 +853,9 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
                 localContainerView.addSubview(localVideoView)
             }
         }
-        if let localVideoStream = localVideoStream, let localVideoView = localVideoView {
-            localVideoStream.attach(localVideoView)
-            print("[SkyMgr] attachLocalVideo: stream attached to view OK")
-        } else {
-            print("[SkyMgr] attachLocalVideo: SKIP stream=\(localVideoStream != nil) view=\(localVideoView != nil) capturingOK=\(capturingSucceeded)")
+        if let localVideoView = localVideoView {
+            stream.attach(localVideoView)
+            print("[SkyMgr][attachLocalVideo] stream attached to view OK")
         }
     }
 
@@ -1074,6 +1079,11 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     func subscription(_ subscription: RoomSubscription, didAttach stream: RemoteStream) {
         Task { @MainActor in
             guard self.delegatesAttached else { return }
+            // didAttach は stream が確定した時点で呼ばれる → handleStreamAttachment で再チェック
+            guard subscription.stream != nil else {
+                print("[SkyMgr][didAttach] BLOCK: subscription.stream=nil despite didAttach, subId=\(subscription.id)")
+                return
+            }
             self.handleStreamAttachment(subscription: subscription)
         }
     }
