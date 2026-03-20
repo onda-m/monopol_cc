@@ -531,6 +531,54 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         publication.publisher?.id
     }
 
+    /// video publish の安全ゲート（最終防衛: try-catch で crash 防止）
+    /// LocalVideoStream は .track を公開していないため、capturingSucceeded + cameraVideoSource の状態で事前判定し、
+    /// それでも内部 track が invalid なケース（バックグラウンド復帰等）は publish 例外で捕捉する
+    @MainActor
+    private func safePublishVideo(localMember: LocalRoomMember) async -> Bool {
+        guard let stream = localVideoStream else {
+            print("[SkyMgr][safePublish] BLOCK: localVideoStream=nil")
+            return false
+        }
+        guard capturingSucceeded else {
+            print("[SkyMgr][safePublish] BLOCK: capturingSucceeded=false")
+            return false
+        }
+        guard cameraVideoSource != nil else {
+            print("[SkyMgr][safePublish] BLOCK: cameraVideoSource=nil (capture source lost)")
+            resetVideoStateIfNeeded()
+            return false
+        }
+        // 既に video を publish 済みならスキップ（二重 publish 防止）
+        let alreadyPublished = roomPublications.values.contains(where: { $0.contentType == .video })
+        guard !alreadyPublished else {
+            print("[SkyMgr][safePublish] SKIP: video already published")
+            return true
+        }
+        do {
+            let pub = try await localMember.publish(stream, options: RoomPublicationOptions())
+            pub.delegate = self
+            roomPublications[pub.id] = pub
+            print("[SkyMgr][safePublish] video ok pubId=\(pub.id)")
+            // publish 成功後にプレビューを再 attach（黒画面修復）
+            attachLocalVideo()
+            return true
+        } catch {
+            print("[SkyMgr][safePublish][ERROR] publish failed: \(error)")
+            // publish 失敗 → 状態リセットして次回再 capture 可能にする
+            resetVideoStateIfNeeded()
+            return false
+        }
+    }
+
+    /// video 状態をリセットし、次回 prepareLocalStreamsIfNeeded で再 capture させる
+    private func resetVideoStateIfNeeded() {
+        print("[SkyMgr] resetVideoStateIfNeeded: capturingSucceeded=\(capturingSucceeded) videoStream=\(localVideoStream != nil) cameraSource=\(cameraVideoSource != nil)")
+        capturingSucceeded = false
+        localVideoStream = nil
+        cameraVideoSource = nil
+    }
+
     @MainActor
     private func publishLocalStreams(localMember: LocalRoomMember) async throws {
         print("[SkyMgr][publish] start audioStream=\(localAudioStream != nil) videoStream=\(localVideoStream != nil) dataStream=\(localDataStream != nil) capturingOK=\(capturingSucceeded)")
@@ -544,15 +592,9 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         } else {
             print("[SkyMgr][publish] audio SKIP stream=nil")
         }
-        if let localVideoStream = localVideoStream, capturingSucceeded {
-            let pub = try await localMember.publish(localVideoStream, options: RoomPublicationOptions())
-            pub.delegate = self
-            roomPublications[pub.id] = pub
-            print("[SkyMgr][publish] video ok pubId=\(pub.id)")
-            // publish 成功後にプレビューを再 attach（setWaitLocal 時に stream が nil で黒画面だった場合の修復）
-            attachLocalVideo()
-        } else {
-            print("[SkyMgr][publish] video SKIP stream=\(localVideoStream != nil) capturingOK=\(capturingSucceeded)")
+        let videoOk = await safePublishVideo(localMember: localMember)
+        if !videoOk {
+            print("[SkyMgr][publish] video SKIP by safePublishVideo gate")
         }
         if let localDataStream = localDataStream {
             let pub = try await localMember.publish(localDataStream, options: RoomPublicationOptions())
