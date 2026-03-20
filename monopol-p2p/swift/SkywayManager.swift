@@ -37,6 +37,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     private var dataSource: DataSource?
     private var cameraDevice: AVCaptureDevice?
     private var capturingSucceeded: Bool = false
+    /// video publish 済みフラグ（二重 publish 完全防止）
+    private var hasPublishedVideo: Bool = false
     private var contextSetupDone: Bool = false
     private var remoteVideoStream: RemoteVideoStream?
     private var remoteAudioStream: RemoteAudioStream?
@@ -317,8 +319,9 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         isConnectStarted = true
         sessionDelegate = delegate
         roomClosed = false
+        hasPublishedVideo = false  // 新セッション開始のためリセット
         delegatesAttached = false  // 【5】再join時に attachRoomCallbacks が確実に実行されるようリセット
-        print("[SkyMgr] roomClosed set to false reason=connectStart")
+        print("[SkyMgr] roomClosed set to false reason=connectStart hasPublishedVideo→false")
         subscribedPublicationIds.removeAll()  // リセット
         roomTask?.cancel()
         roomTask = Task { @MainActor in
@@ -351,6 +354,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             self.microphoneAudioSource = nil
             self.cameraVideoSource = nil
             self.capturingSucceeded = false
+            self.hasPublishedVideo = false
             self.dataSource = nil
             self.cameraDevice = nil
             self.remoteVideoStream = nil
@@ -611,6 +615,11 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     /// それでも内部 track が invalid なケース（バックグラウンド復帰等）は publish 例外で捕捉する
     @MainActor
     private func safePublishVideo(localMember: LocalRoomMember) async -> Bool {
+        // --- 二重 publish 完全防止（最優先ガード）---
+        guard !hasPublishedVideo else {
+            print("[SkyMgr][safePublish] BLOCK: already published (hasPublishedVideo=true)")
+            return true
+        }
         guard let stream = localVideoStream else {
             print("[SkyMgr][safePublish] BLOCK: localVideoStream=nil")
             return false
@@ -624,17 +633,19 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             resetVideoStateIfNeeded()
             return false
         }
-        // 既に video を publish 済みならスキップ（二重 publish 防止）
+        // roomPublications 側でも二重チェック（フラグとの整合性確認）
         let alreadyPublished = roomPublications.values.contains(where: { $0.contentType == .video })
         guard !alreadyPublished else {
-            print("[SkyMgr][safePublish] SKIP: video already published")
+            print("[SkyMgr][safePublish] SKIP: video already in roomPublications (fixing flag)")
+            hasPublishedVideo = true
             return true
         }
         do {
             let pub = try await localMember.publish(stream, options: RoomPublicationOptions())
             pub.delegate = self
             roomPublications[pub.id] = pub
-            print("[SkyMgr][safePublish] video ok pubId=\(pub.id)")
+            hasPublishedVideo = true
+            print("[SkyMgr][safePublish] video ok pubId=\(pub.id) hasPublishedVideo→true")
             // publish 成功後にプレビューを再 attach（黒画面修復）
             attachLocalVideo()
             return true
@@ -648,7 +659,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     /// video 状態をリセットし、次回 prepareLocalStreamsIfNeeded で再 capture させる
     private func resetVideoStateIfNeeded() {
-        print("[SkyMgr] resetVideoStateIfNeeded: capturingSucceeded=\(capturingSucceeded) videoStream=\(localVideoStream != nil) cameraSource=\(cameraVideoSource != nil)")
+        print("[SkyMgr] resetVideoStateIfNeeded: hasPublishedVideo=\(hasPublishedVideo) capturingSucceeded=\(capturingSucceeded) videoStream=\(localVideoStream != nil) cameraSource=\(cameraVideoSource != nil)")
+        hasPublishedVideo = false
         capturingSucceeded = false
         localVideoStream = nil
         cameraVideoSource = nil
@@ -656,7 +668,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     @MainActor
     private func publishLocalStreams(localMember: LocalRoomMember) async throws {
-        print("[SkyMgr][publish] start audioStream=\(localAudioStream != nil) videoStream=\(localVideoStream != nil) dataStream=\(localDataStream != nil) capturingOK=\(capturingSucceeded) bgUnpublished=\(videoUnpublishedForBackground)")
+        print("[SkyMgr][publish] ENTER CALLED hasPublishedVideo=\(hasPublishedVideo) audioStream=\(localAudioStream != nil) videoStream=\(localVideoStream != nil) dataStream=\(localDataStream != nil) capturingOK=\(capturingSucceeded) bgUnpublished=\(videoUnpublishedForBackground)")
         await prepareLocalStreamsIfNeeded()
         print("[SkyMgr][publish] afterPrepare audioStream=\(localAudioStream != nil) videoStream=\(localVideoStream != nil) dataStream=\(localDataStream != nil) capturingOK=\(capturingSucceeded)")
         // --- Audio ---
