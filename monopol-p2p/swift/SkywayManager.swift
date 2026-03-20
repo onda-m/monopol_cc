@@ -39,6 +39,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     private var capturingSucceeded: Bool = false
     /// video publish 済みフラグ（二重 publish 完全防止）
     private var hasPublishedVideo: Bool = false
+    /// video publish 実行中フラグ（concurrent publish 防止）
+    private var isPublishingVideo: Bool = false
     private var contextSetupDone: Bool = false
     private var remoteVideoStream: RemoteVideoStream?
     private var remoteAudioStream: RemoteAudioStream?
@@ -610,16 +612,26 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         publication.publisher?.id
     }
 
-    /// video publish の安全ゲート（最終防衛: try-catch で crash 防止）
-    /// LocalVideoStream は .track を公開していないため、capturingSucceeded + cameraVideoSource の状態で事前判定し、
-    /// それでも内部 track が invalid なケース（バックグラウンド復帰等）は publish 例外で捕捉する
+    /// video publish の安全ゲート
+    /// 同時実行防止: isPublishingVideo（進行中ロック）+ hasPublishedVideo（完了フラグ）の二段構え
+    /// try-catch で SDK 内部エラーも捕捉
     @MainActor
     private func safePublishVideo(localMember: LocalRoomMember) async -> Bool {
-        // --- 二重 publish 完全防止（最優先ガード）---
+        print("[SkyMgr][safePublish] ENTER isPublishingVideo=\(isPublishingVideo) hasPublishedVideo=\(hasPublishedVideo)")
+        // --- 同時実行ロック（concurrent publish 防止）---
+        guard !isPublishingVideo else {
+            print("[SkyMgr][safePublish] BLOCK: already publishing")
+            return false
+        }
+        // --- 完了フラグ（二重 publish 防止）---
         guard !hasPublishedVideo else {
             print("[SkyMgr][safePublish] BLOCK: already published (hasPublishedVideo=true)")
             return true
         }
+        // ロック取得
+        isPublishingVideo = true
+        defer { isPublishingVideo = false }
+
         guard let stream = localVideoStream else {
             print("[SkyMgr][safePublish] BLOCK: localVideoStream=nil")
             return false
@@ -645,12 +657,12 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             pub.delegate = self
             roomPublications[pub.id] = pub
             hasPublishedVideo = true
-            print("[SkyMgr][safePublish] video ok pubId=\(pub.id) hasPublishedVideo→true")
+            print("[SkyMgr][safePublish] SUCCESS pubId=\(pub.id) hasPublishedVideo→true")
             // publish 成功後にプレビューを再 attach（黒画面修復）
             attachLocalVideo()
             return true
         } catch {
-            print("[SkyMgr][safePublish][ERROR] publish failed: \(error)")
+            print("[SkyMgr][safePublish] FAIL error=\(error)")
             // publish 失敗 → 状態リセットして次回再 capture 可能にする
             resetVideoStateIfNeeded()
             return false
