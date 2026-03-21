@@ -620,19 +620,23 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     /// ガード順: ロック → 完了 → トラック準備完了 → stream/source 個別チェック → 二重登録 → publish
     @MainActor
     private func safePublishVideo(localMember: LocalRoomMember) async -> Bool {
+        print("[DIAG][PUBLISH] safePublishVideo ENTER localMember=exists room=\(room == nil ? "nil" : "exists") videoStream=\(localVideoStream == nil ? "nil" : "exists") audioStream=\(localAudioStream == nil ? "nil" : "exists") capturing=\(capturingSucceeded) hasPublished=\(hasPublishedVideo) isPublishing=\(isPublishingVideo) tracksReady=\(localTracksReady)")
         print("[SkyMgr][safePublish] ENTER isPublishingVideo=\(isPublishingVideo) hasPublishedVideo=\(hasPublishedVideo) localTracksReady=\(localTracksReady)")
         // --- 1. 同時実行ロック ---
         guard !isPublishingVideo else {
+            print("[DIAG][PUBLISH_GATE] skip reason=isPublishingVideo_true")
             print("[SkyMgr][safePublish] BLOCK: already publishing")
             return false
         }
         // --- 2. 完了フラグ ---
         guard !hasPublishedVideo else {
+            print("[DIAG][PUBLISH_GATE] skip reason=hasPublishedVideo_true")
             print("[SkyMgr][safePublish] BLOCK: already published (hasPublishedVideo=true)")
             return true
         }
         // --- 3. トラック準備完了チェック（audio + video 両方必須）---
         guard localTracksReady else {
+            print("[DIAG][PUBLISH_GATE] skip reason=localTracksReady_false")
             print("[SkyMgr][safePublish] BLOCK: localTracksReady=false (tracks not generated)")
             return false
         }
@@ -642,18 +646,22 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
         // --- 4. 個別 stream nil チェック ---
         guard let stream = localVideoStream else {
+            print("[DIAG][PUBLISH_GATE] skip reason=localVideoStream_nil")
             print("[SkyMgr][safePublish] BLOCK: localVideoStream=nil")
             return false
         }
         guard localAudioStream != nil else {
+            print("[DIAG][PUBLISH_GATE] skip reason=localAudioStream_nil")
             print("[SkyMgr][safePublish] BLOCK: localAudioStream=nil (audio track missing)")
             return false
         }
         guard capturingSucceeded else {
+            print("[DIAG][PUBLISH_GATE] skip reason=capturingSucceeded_false")
             print("[SkyMgr][safePublish] BLOCK: capturingSucceeded=false")
             return false
         }
         guard cameraVideoSource != nil else {
+            print("[DIAG][PUBLISH_GATE] skip reason=cameraVideoSource_nil")
             print("[SkyMgr][safePublish] BLOCK: cameraVideoSource=nil (capture source lost)")
             resetVideoStateIfNeeded()
             return false
@@ -661,6 +669,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         // --- 5. roomPublications 二重登録チェック ---
         let alreadyPublished = roomPublications.values.contains(where: { $0.contentType == .video })
         guard !alreadyPublished else {
+            print("[DIAG][PUBLISH_GATE] skip reason=already_in_roomPublications")
             print("[SkyMgr][safePublish] SKIP: video already in roomPublications (fixing flag)")
             hasPublishedVideo = true
             return true
@@ -736,6 +745,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
                 print("[DIAG][PUBLISH] FAIL kind=audio error=\(error)")
             }
         } else {
+            print("[DIAG][PUBLISH_GATE] skip reason=localAudioStream_nil (in publishLocalStreams)")
             print("[SkyMgr][publish][AUDIO] SKIP stream=nil")
         }
         // --- Video: safePublishVideo のみ（直接 publish 禁止）---
