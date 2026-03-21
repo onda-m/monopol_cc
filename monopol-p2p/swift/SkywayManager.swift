@@ -108,7 +108,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     /// バックグラウンド遷移時: video publication を unpublish して track 参照を安全に切る
     @objc private func appDidEnterBackground() {
-        print("[SkyMgr][lifecycle] appDidEnterBackground: unpublishing video to prevent track crash")
+        print("[DIAG][CB] appDidEnterBackground \(diagPublishState)")
         Task { @MainActor in
             await self.unpublishVideoIfNeeded()
             self.videoUnpublishedForBackground = true
@@ -117,11 +117,16 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     /// フォアグラウンド復帰時: camera を再 capture して video を再 publish
     @objc private func appWillEnterForeground() {
-        print("[SkyMgr][lifecycle] appWillEnterForeground: recapturing video")
+        print("[DIAG][CB] appWillEnterForeground bgUnpublished=\(videoUnpublishedForBackground) \(diagPublishState)")
         Task { @MainActor in
-            guard self.videoUnpublishedForBackground else { return }
+            guard self.videoUnpublishedForBackground else {
+                print("[DIAG][CB] appWillEnterForeground SKIP bgUnpublished=false")
+                return
+            }
             self.videoUnpublishedForBackground = false
+            print("[DIAG][CB] appWillEnterForeground → recaptureAndRepublishVideo START")
             await self.recaptureAndRepublishVideo()
+            print("[DIAG][CB] appWillEnterForeground → recaptureAndRepublishVideo END")
         }
     }
 
@@ -1023,6 +1028,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     func roomDidClose(_ room: Room) {
         Task { @MainActor in
+            print("[DIAG][CB] roomDidClose delegatesAttached=\(self.delegatesAttached) \(self.diagPublishState)")
             guard self.delegatesAttached else { return }
             print("[SkyMgr] roomDidClose")
             await self.detachRoomCallbacks(reason: "roomDidClose")  // isConnectStarted = false はここで設定される
@@ -1031,7 +1037,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     func roomMemberListDidChange(_ room: Room) {
-        // Handled by memberDidJoin/memberDidLeave
+        print("[DIAG][CB] roomMemberListDidChange \(diagPublishState)")
     }
 
     func room(_ room: Room, memberDidJoin member: RoomMember) {
@@ -1039,7 +1045,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             let memberId = self.memberIdentifier(member)
             let localId = self.localMember.map { self.localMemberIdentifier($0) } ?? "nil"
             let isRemote = memberId != localId
-            print("[DIAG][FLOW] memberDidJoin memberId=\(memberId) isRemote=\(isRemote) localMember=\(self.localMember == nil ? "nil" : "exists")")
+            print("[DIAG][CB] memberDidJoin memberId=\(memberId) isRemote=\(isRemote) \(self.diagPublishState)")
             print("[FLOW][L7] memberDidJoin memberId=\(memberId) localId=\(localId) isRemote=\(isRemote) delegatesAttached=\(self.delegatesAttached) localMember=\(self.localMember == nil ? "nil" : "exists") roomId=\(room.id)")
             guard self.delegatesAttached else { return }
             guard let localMember = self.localMember else { return }
@@ -1052,29 +1058,33 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     func room(_ room: Room, memberDidLeave member: RoomMember) {
         Task { @MainActor in
+            print("[DIAG][CB] memberDidLeave memberId=\(member.id) \(self.diagPublishState)")
             guard self.delegatesAttached else { return }
-            guard !self.roomClosed else { return }  // 既に閉じている場合はスキップ
+            guard !self.roomClosed else { return }
             guard let localMember = self.localMember else { return }
             if self.memberIdentifier(member) != self.localMemberIdentifier(localMember) {
                 print("[SkyMgr] memberDidLeave: remote member left, memberId=\(member.id)")
-                // 1対1通話なので相手が退出したら終了扱い
                 self.sessionDelegate?.connectDisconnect()
-                // ルームから退出してリソースをクリーンアップ
-                await self.leaveRoomIfNeeded(reason: "memberDidLeave")  // isConnectStarted = false はここで設定される
+                await self.leaveRoomIfNeeded(reason: "memberDidLeave")
             }
         }
     }
 
     func roomPublicationListDidChange(_ room: Room) {
-        // Handled by didPublishStreamOf/didUnpublishStreamOf
+        print("[DIAG][CB] roomPublicationListDidChange \(diagPublishState)")
     }
 
     func room(_ room: Room, didPublishStreamOf publication: RoomPublication) {
         Task { @MainActor in
+            let pubId = publication.id
+            let contentType = publication.contentType
+            let publisherId = self.publicationPublisherIdentifier(publication) ?? "nil"
+            let localMemberId = self.localMember.map { self.localMemberIdentifier($0) } ?? "nil"
+            let isRemote = publisherId != localMemberId
+            print("[DIAG][CB] didPublishStreamOf pubId=\(pubId) contentType=\(contentType) publisherId=\(publisherId) isRemote=\(isRemote) \(self.diagPublishState)")
             guard self.delegatesAttached else { return }
             guard let localMember = self.localMember else { return }
-            let localMemberId = self.localMemberIdentifier(localMember)
-            if self.publicationPublisherIdentifier(publication) != localMemberId {
+            if isRemote {
                 await self.subscribeToPublication(publication, localMember: localMember)
             }
         }
@@ -1083,10 +1093,10 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     /// 【7】didUnpublishStreamOf: remote stream クリア追加
     func room(_ room: Room, didUnpublishStreamOf publication: RoomPublication) {
         Task { @MainActor in
-            guard self.delegatesAttached else { return }
             let pubId = publication.id
             let contentType = publication.contentType
-            print("[SkyMgr] didUnpublishStreamOf pubId=\(pubId) contentType=\(contentType)")
+            print("[DIAG][CB] didUnpublishStreamOf pubId=\(pubId) contentType=\(contentType) \(self.diagPublishState)")
+            guard self.delegatesAttached else { return }
 
             // contentType に応じて remote stream を確実にクリア
             switch contentType {
@@ -1119,12 +1129,12 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     func roomSubscriptionListDidChange(_ room: Room) {
-        // Handled by didSubscribePublicationOf/didUnsubscribePublicationOf
+        print("[DIAG][CB] roomSubscriptionListDidChange \(diagPublishState)")
     }
 
     func room(_ room: Room, didSubscribePublicationOf subscription: RoomSubscription) {
-        // Subscription created elsewhere; ensure delegate is set
         Task { @MainActor in
+            print("[DIAG][CB] didSubscribePublicationOf subId=\(subscription.id) contentType=\(subscription.contentType) stream=\(subscription.stream == nil ? "nil" : "exists") \(self.diagPublishState)")
             guard self.delegatesAttached else { return }
             if self.roomSubscriptions[subscription.id] == nil {
                 subscription.delegate = self
@@ -1136,6 +1146,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     func room(_ room: Room, didUnsubscribePublicationOf subscription: RoomSubscription) {
         Task { @MainActor in
+            print("[DIAG][CB] didUnsubscribePublicationOf subId=\(subscription.id) \(self.diagPublishState)")
             guard self.delegatesAttached else { return }
             subscription.delegate = nil
             self.roomSubscriptions.removeValue(forKey: subscription.id)
@@ -1146,6 +1157,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     func localRoomMember(_ member: LocalRoomMember, didUnpublishStreamOf publication: RoomPublication) {
         Task { @MainActor in
+            print("[DIAG][CB] localMember.didUnpublishStreamOf pubId=\(publication.id) contentType=\(publication.contentType) \(self.diagPublishState)")
             guard self.delegatesAttached else { return }
             publication.delegate = nil
             self.roomPublications.removeValue(forKey: publication.id)
@@ -1154,6 +1166,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     func localRoomMember(_ member: LocalRoomMember, didUnsubscribePublicationOf subscription: RoomSubscription) {
         Task { @MainActor in
+            print("[DIAG][CB] localMember.didUnsubscribePublicationOf subId=\(subscription.id) \(self.diagPublishState)")
             guard self.delegatesAttached else { return }
             subscription.delegate = nil
             self.roomSubscriptions.removeValue(forKey: subscription.id)
@@ -1164,12 +1177,11 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     func subscription(_ subscription: RoomSubscription, connectionStateDidChange connectionState: ConnectionState) {
         Task { @MainActor in
+            print("[DIAG][CB] subscription.connectionStateDidChange subId=\(subscription.id) state=\(connectionState) contentType=\(subscription.contentType) \(self.diagPublishState)")
             guard self.delegatesAttached else { return }
             if connectionState == .disconnected {
-                // Remote stream ended
                 subscription.delegate = nil
                 self.roomSubscriptions.removeValue(forKey: subscription.id)
-                // If this was the video subscription, clear remote video
                 if subscription.contentType == .video {
                     self.detachRemoteVideo()
                     self.remoteVideoStream = nil
@@ -1181,8 +1193,8 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     func subscription(_ subscription: RoomSubscription, didAttach stream: RemoteStream) {
         Task { @MainActor in
+            print("[DIAG][CB] subscription.didAttach subId=\(subscription.id) streamType=\(type(of: stream)) \(self.diagPublishState)")
             guard self.delegatesAttached else { return }
-            // didAttach は stream が確定した時点で呼ばれる → handleStreamAttachment で再チェック
             guard subscription.stream != nil else {
                 print("[SkyMgr][didAttach] BLOCK: subscription.stream=nil despite didAttach, subId=\(subscription.id)")
                 return
@@ -1195,6 +1207,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     func publicationStateDidChange(_ publication: RoomPublication) {
         Task { @MainActor in
+            print("[DIAG][CB] publicationStateDidChange pubId=\(publication.id) state=\(publication.state) contentType=\(publication.contentType) \(self.diagPublishState)")
             guard self.delegatesAttached else { return }
             if publication.state == .canceled {
                 publication.delegate = nil
@@ -1205,9 +1218,9 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     func publication(_ publication: RoomPublication, connectionStateDidChange connectionState: ConnectionState) {
         Task { @MainActor in
+            print("[DIAG][CB] publication.connectionStateDidChange pubId=\(publication.id) state=\(connectionState) contentType=\(publication.contentType) \(self.diagPublishState)")
             guard self.delegatesAttached else { return }
             if connectionState == .disconnected {
-                // Publication connection lost
                 publication.delegate = nil
                 self.roomPublications.removeValue(forKey: publication.id)
             }
