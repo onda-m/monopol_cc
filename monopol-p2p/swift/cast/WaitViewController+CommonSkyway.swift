@@ -1480,22 +1480,25 @@ extension WaitViewController: SkywaySessionDelegate {
         // 揃っていない状態で承認 → リスナー subscribe → sender.cpp:78 crash になる
         let hasVideoPub = pubInfo.contains(where: { $0.contains("video") })
         let hasAudioPub = pubInfo.contains(where: { $0.contains("audio") })
+        let previewOk = mgr.isLocalPreviewAttached
+        print("[DIAG][READY] connectSucces pubCheck: hasVideoPub=\(hasVideoPub) hasAudioPub=\(hasAudioPub) previewAttached=\(previewOk)")
         isNewSDKReadyForApproval = true
 
-        if hasVideoPub && hasAudioPub {
+        if hasVideoPub && hasAudioPub && previewOk {
             isSkyWayReady = true
-            print("[DIAG][READY] connectSucces isSkyWayReady=true (video+audio pub verified)")
+            print("[DIAG][READY] connectSucces isSkyWayReady=true (video+audio pub + preview verified)")
         } else {
             isSkyWayReady = false
-            print("[DIAG][READY] connectSucces isSkyWayReady=false hasVideoPub=\(hasVideoPub) hasAudioPub=\(hasAudioPub) — scheduling deferred check")
+            print("[DIAG][READY] connectSucces isSkyWayReady=false — scheduling deferred check")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard let self = self else { return }
                 let retryInfo = mgr.localPublicationInfo()
                 let retryVideo = retryInfo.contains(where: { $0.contains("video") })
                 let retryAudio = retryInfo.contains(where: { $0.contains("audio") })
-                print("[DIAG][READY] deferred check: pubs=\(retryInfo) hasVideo=\(retryVideo) hasAudio=\(retryAudio) \(mgr.diagPublishState)")
-                guard retryVideo && retryAudio else {
-                    print("[DIAG][READY] deferred: still missing pubs, isSkyWayReady remains false")
+                let retryPreview = mgr.isLocalPreviewAttached
+                print("[DIAG][READY] deferred check: pubs=\(retryInfo) hasVideo=\(retryVideo) hasAudio=\(retryAudio) preview=\(retryPreview) \(mgr.diagPublishState)")
+                guard retryVideo && retryAudio && retryPreview else {
+                    print("[DIAG][READY] deferred: conditions not met, isSkyWayReady remains false")
                     return
                 }
                 self.isSkyWayReady = true

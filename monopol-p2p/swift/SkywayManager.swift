@@ -71,6 +71,11 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     var isSessionHealthy: Bool {
         return room != nil && localMember != nil && localTracksReady && capturingSucceeded
     }
+
+    /// local preview が正常にアタッチ済みかどうか
+    var isLocalPreviewAttached: Bool {
+        return localVideoStream != nil && localVideoView != nil && localContainerView != nil && capturingSucceeded
+    }
     private var remoteVideoStream: RemoteVideoStream?
     private var remoteAudioStream: RemoteAudioStream?
     private var remoteDataStream: RemoteDataStream?
@@ -326,10 +331,11 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     public func setWaitLocal(localView: UIView, delegate: SkywaySessionDelegate) {
         sessionDelegate = delegate
         localContainerView = localView
-        Task { @MainActor in
-            await prepareLocalStreamsIfNeeded()
-            attachLocalVideo()
-        }
+        // prepare は connectStart → publishLocalStreams で行うため、ここでは省略
+        // （ここで prepare すると connectStart のリセットとレースし stream 不一致の原因になる）
+        // attach のみ実行: localVideoStream が既にあればプレビューを表示する
+        print("[SkyMgr] setWaitLocal: localContainerView set, calling attachLocalVideo (prepare skipped)")
+        attachLocalVideo()
     }
 
     /// ルームに参加し、ローカルストリームを publish する
@@ -977,11 +983,14 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     private func attachLocalVideo() {
+        let containerExists = localContainerView != nil
+        let streamExists = localVideoStream != nil
+        let viewExists = localVideoView != nil
+        print("[DIAG][LOCAL_PREVIEW] attachLocalVideo ENTER container=\(containerExists) stream=\(streamExists) view=\(viewExists) capturing=\(capturingSucceeded) cameraSource=\(cameraVideoSource != nil) hasPublishedVideo=\(hasPublishedVideo) tracksReady=\(localTracksReady)")
         guard let localContainerView = localContainerView else {
             print("[SkyMgr][attachLocalVideo] BLOCK: localContainerView=nil")
             return
         }
-        // stream が nil の場合は attach 禁止（VideoView 作成もスキップ）
         guard let stream = localVideoStream else {
             print("[SkyMgr][attachLocalVideo] BLOCK: localVideoStream=nil capturingOK=\(capturingSucceeded)")
             return
@@ -991,11 +1000,12 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             if let localVideoView = localVideoView {
                 localVideoView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
                 localContainerView.addSubview(localVideoView)
+                print("[DIAG][LOCAL_PREVIEW] VideoView created frame=\(localContainerView.bounds)")
             }
         }
         if let localVideoView = localVideoView {
             stream.attach(localVideoView)
-            print("[SkyMgr][attachLocalVideo] stream attached to view OK")
+            print("[DIAG][LOCAL_PREVIEW] stream.attach OK viewFrame=\(localVideoView.frame) containerHidden=\(localContainerView.isHidden) containerSuperview=\(localContainerView.superview != nil)")
         }
     }
 
