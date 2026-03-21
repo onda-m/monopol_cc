@@ -2791,6 +2791,10 @@ class UtilFunc {
     
     //自分の情報をアプリ内に記憶する
     static func setMyInfo(){
+        setMyInfo(completion: nil)
+    }
+
+    static func setMyInfo(completion: (() -> Void)?){
         //いったんクリアしておく
         //userInfo.removeAll()
         var strUserId: String = ""
@@ -3097,9 +3101,10 @@ class UtilFunc {
                 //個別設定がされているかのフラグ（１：されている　２：されていない）
                 //UserDefaults.standard.set("2", forKey: "streamer_individual_setting_flg")
             }
+            completion?()
         }
     }
-    
+
     //コインの購入履歴を保存
     //func purchaseRirekiDo(pathindex:Int, _ after:@escaping () -> Void){
     //func purchaseRirekiDo(pathindex:Int){

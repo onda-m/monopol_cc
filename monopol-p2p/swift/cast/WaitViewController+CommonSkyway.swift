@@ -1153,6 +1153,41 @@ extension WaitViewController{
     }
 }
 
+// MARK: - Point Sync
+extension WaitViewController {
+
+    /// livePointLbl を currentPoint の値で更新する（メインスレッド保証）
+    func updatePointLabel() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.livePointLbl != nil else { return }
+            self.livePointLbl.text = String(UtilFunc.numFormatter(num: self.currentPoint)) + " pt"
+            self.livePointLbl.adjustsFontSizeToFitWidth = true
+            self.livePointLbl.minimumScaleFactor = 0.3
+        }
+    }
+
+    /// サーバーからポイントを取得し currentPoint → livePointLbl を更新する
+    /// 多重呼び出し時は最新の呼び出しのみ UI に反映する（token 方式）
+    func syncLivePoint() {
+        let token = UUID()
+        self.syncPointToken = token
+        print("[Point] syncLivePoint: start token=\(token)")
+
+        UtilFunc.setMyInfo { [weak self] in
+            guard let self = self else { return }
+            // トークンが一致しなければ、より新しい呼び出しがあるので破棄
+            guard self.syncPointToken == token else {
+                print("[Point] syncLivePoint: stale token=\(token) current=\(self.syncPointToken), skip")
+                return
+            }
+            let pt = UserDefaults.standard.integer(forKey: "myLivePoint")
+            self.currentPoint = pt
+            print("[Point] syncLivePoint: updated pt=\(pt)")
+            self.updatePointLabel()
+        }
+    }
+}
+
 // MARK: - New SDK Entry Points (Phase1)
 extension WaitViewController {
 
@@ -1195,6 +1230,7 @@ extension WaitViewController {
         print("[NewSDK][MVP] startWaitingUsingNewSDK: Firebase userrequest/\(self.user_id) removed")
 
         // サーバーに待機状態を通知（旧SDKでは setWait() 内の loginDo() で行っていた処理）
+<<<<<<< HEAD
         // これがないとリスナー側で reserve_flg/login_status が更新されず「予約申請をすることができません」になる
         print("[NewSDK] startWaitingUsingNewSDK: loginDo status=1 reserve_flg=\(self.appDelegate.reserveFlg)")
         UtilFunc.loginDo(user_id: self.user_id, status: 1, live_user_id: 0, reserve_flg: Int(self.appDelegate.reserveFlg)!, max_reserve_count: Int(self.appDelegate.reserveMaxCount)!, password: "0")
@@ -1297,6 +1333,14 @@ extension WaitViewController {
                 return
             }
         })
+=======
+        // これがないとリスナー側で reserve_flg が更新されず「予約申請をすることができません」になる
+        UtilFunc.loginDo(user_id: self.user_id, status: 1, live_user_id: 0, reserve_flg: Int(self.appDelegate.reserveFlg)!, max_reserve_count: Int(self.appDelegate.reserveMaxCount)!, password: "0")
+        print("[NewSDK] startWaitingUsingNewSDK: loginDo status=1 reserve_flg=\(self.appDelegate.reserveFlg)")
+
+        // 配信ポイント(累計)をサーバーから同期（旧SDKでは setWait() 内で直接表示していた処理）
+        self.syncLivePoint()
+>>>>>>> ca25d08 (start 20260321)
 
         // 待機開始準備中: 配信UIを非表示にし操作を無効化
         // sessionStart → connectSucces() で .waiting になる
@@ -1388,6 +1432,7 @@ extension WaitViewController: SkywaySessionDelegate {
         setWaitState(.waiting)
         SkywayManager.sharedManager().setWaitLocal(localView: localStreamView, delegate: self)
         SkywayManager.sharedManager().setRemoteView(remoteView: remoteStreamView)
+<<<<<<< HEAD
 
         // NewSDK: Room参加 + publish 完了後に CastLock を解除
         // 旧SDKでは PEER_EVENT_OPEN (line 561,568) で行っていた処理
@@ -1395,6 +1440,10 @@ extension WaitViewController: SkywaySessionDelegate {
         UtilFunc.deleteCastLock(cast_id: self.user_id, user_id: 0, type: 2)
 
         print("[READY][connectSucces] before isSkyWayReady=\(isSkyWayReady) isNewSDKReadyForApproval=\(isNewSDKReadyForApproval) waitState=\(waitState) peer=\(peer == nil ? "nil" : "exists")")
+=======
+        // 再接続時にもポイントを最新化
+        self.syncLivePoint()
+>>>>>>> ca25d08 (start 20260321)
         print("[NewSDK] WaitViewController: connectSucces - 待機完了 isNewSDKReadyForApproval→true isSkyWayReady=\(isSkyWayReady) isPendingApproval=\(isPendingApproval)")
         isNewSDKReadyForApproval = true
         Task { @MainActor in

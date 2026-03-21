@@ -156,6 +156,10 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     //左上のライブポイントのところ
     @IBOutlet weak var livePointView: UIView!
     @IBOutlet weak var livePointLbl: UILabel!
+    /// 現在の配信ポイント（syncLivePoint で同期）
+    var currentPoint: Int = 0
+    /// syncLivePoint 多重実行制御用トークン（最新の呼び出しのみ UI 反映）
+    private var syncPointToken: UUID = UUID()
     
     //予約の許可・拒否を選択するボタン
     @IBOutlet weak var reserveFlgBtn: UIButton!
@@ -352,6 +356,10 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
         Task { @MainActor in
             self.setWaitState(.idle)
         }
+
+        // 配信ポイント: キャッシュから初期表示（API同期前のfallback）
+        self.currentPoint = UserDefaults.standard.integer(forKey: "myLivePoint")
+        self.updatePointLabel()
 
         let mainBoundSize: CGSize = UIScreen.main.bounds.size
         self.castSelectedDialog.frame = CGRect(x: 0, y: -50, width: mainBoundSize.width, height: mainBoundSize.height + 100)
@@ -1460,6 +1468,9 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
         super.viewWillAppear(animated)
         let instanceId = UInt(bitPattern: ObjectIdentifier(self)) & 0xFFFF
         print("[VC][LIFECYCLE] viewWillAppear instance=0x\(String(instanceId, radix: 16)) waitState=\(waitState) thread=\(Thread.isMainThread ? "MT" : "BG")")
+
+        // サーバーからポイントを同期（画面遷移時に最新値を取得）
+        self.syncLivePoint()
 
         // 子ノード condition への参照
         self.castWaitConditionRef = self.rootRef.child(Util.INIT_FIREBASE + "/"
