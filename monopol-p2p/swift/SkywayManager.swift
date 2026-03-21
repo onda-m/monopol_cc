@@ -44,6 +44,11 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     /// ローカルトラック（audio + video）生成完了フラグ — これが true でなければ publish 禁止
     private(set) var localTracksReady: Bool = false
     private var contextSetupDone: Bool = false
+
+    /// 診断用: publish 前提条件の文字列を返す
+    var diagPublishState: String {
+        return "room=\(room == nil ? "nil" : "exists") localMember=\(localMember == nil ? "nil" : "exists") videoStream=\(localVideoStream == nil ? "nil" : "exists") audioStream=\(localAudioStream == nil ? "nil" : "exists") capturing=\(capturingSucceeded) hasPublishedVideo=\(hasPublishedVideo) isPublishingVideo=\(isPublishingVideo) tracksReady=\(localTracksReady)"
+    }
     private var remoteVideoStream: RemoteVideoStream?
     private var remoteAudioStream: RemoteAudioStream?
     private var remoteDataStream: RemoteDataStream?
