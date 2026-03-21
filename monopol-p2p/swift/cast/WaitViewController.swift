@@ -197,6 +197,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
 
     @MainActor
     func setWaitState(_ newState: WaitState) {
+        print("[DIAG][STATE] \(self.waitState) -> \(newState) thread=\(Thread.isMainThread ? "MT" : "BG")")
         guard waitState != newState else {
             print("[WaitState] SKIP(guard) \(waitState)→\(newState) thread=\(Thread.isMainThread ? "MT" : "BG")")
             #if DEBUG
@@ -1471,7 +1472,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
         print("[VC][LIFECYCLE] viewWillAppear instance=0x\(String(instanceId, radix: 16)) waitState=\(waitState) thread=\(Thread.isMainThread ? "MT" : "BG")")
 
         // サーバーからポイントを同期（画面遷移時に最新値を取得）
-        print("[DIAG][SYNC_POINT] calling from viewWillAppear")
+        print("[DIAG][SYNC_CALL] from=viewWillAppear")
         self.syncLivePoint()
 
         // 子ノード condition への参照

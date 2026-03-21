@@ -672,10 +672,12 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             roomPublications[pub.id] = pub
             hasPublishedVideo = true
             print("[SkyMgr][safePublish] SUCCESS pubId=\(pub.id) hasPublishedVideo→true")
+            print("[DIAG][PUBLISH] SUCCESS kind=video")
             attachLocalVideo()
             return true
         } catch {
             print("[SkyMgr][safePublish] FAIL error=\(error)")
+            print("[DIAG][PUBLISH] FAIL kind=video error=\(error)")
             resetVideoStateIfNeeded()
             return false
         }
@@ -720,6 +722,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         await prepareLocalStreamsIfNeeded()
         print("[SkyMgr][publish] afterPrepare localTracksReady=\(localTracksReady) audioStream=\(localAudioStream != nil) videoStream=\(localVideoStream != nil) dataStream=\(localDataStream != nil) capturingOK=\(capturingSucceeded)")
         // --- Audio ---
+        print("[DIAG][PUBLISH] BEFORE AUDIO localAudioStream=\(localAudioStream == nil ? "nil" : "exists") localMember=\(localMember == nil ? "nil" : "exists") room=\(room == nil ? "nil" : "exists")")
         if let localAudioStream = localAudioStream {
             print("[SkyMgr][publish][AUDIO] >>> CALLING localMember.publish(audio) micSource=\(microphoneAudioSource != nil)")
             do {
@@ -727,13 +730,16 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
                 pub.delegate = self
                 roomPublications[pub.id] = pub
                 print("[SkyMgr][publish][AUDIO] <<< SUCCESS pubId=\(pub.id)")
+                print("[DIAG][PUBLISH] SUCCESS kind=audio")
             } catch {
                 print("[SkyMgr][publish][AUDIO] <<< FAILED error=\(error)")
+                print("[DIAG][PUBLISH] FAIL kind=audio error=\(error)")
             }
         } else {
             print("[SkyMgr][publish][AUDIO] SKIP stream=nil")
         }
         // --- Video: safePublishVideo のみ（直接 publish 禁止）---
+        print("[DIAG][PUBLISH] BEFORE VIDEO localVideoStream=\(localVideoStream == nil ? "nil" : "exists") localMember=\(localMember == nil ? "nil" : "exists") room=\(room == nil ? "nil" : "exists")")
         print("[SkyMgr][publish][VIDEO] >>> CALLING safePublishVideo")
         let videoOk = await safePublishVideo(localMember: localMember)
         if !videoOk {
@@ -860,6 +866,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     @MainActor
     private func handleStreamAttachment(subscription: RoomSubscription) {
+        print("[DIAG][ATTACH] BEFORE stream=\(subscription.stream == nil ? "nil" : "exists") subId=\(subscription.id)")
         // stream=nil の場合は即 return（SDK内部 publish 誘発による crash 防止）
         // 「will attach later」ロジックは完全禁止
         guard let stream = subscription.stream else {
@@ -1009,6 +1016,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             let memberId = self.memberIdentifier(member)
             let localId = self.localMember.map { self.localMemberIdentifier($0) } ?? "nil"
             let isRemote = memberId != localId
+            print("[DIAG][FLOW] memberDidJoin memberId=\(memberId) isRemote=\(isRemote) localMember=\(self.localMember == nil ? "nil" : "exists")")
             print("[FLOW][L7] memberDidJoin memberId=\(memberId) localId=\(localId) isRemote=\(isRemote) delegatesAttached=\(self.delegatesAttached) localMember=\(self.localMember == nil ? "nil" : "exists") roomId=\(room.id)")
             guard self.delegatesAttached else { return }
             guard let localMember = self.localMember else { return }

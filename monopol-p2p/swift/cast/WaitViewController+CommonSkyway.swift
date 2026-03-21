@@ -13,6 +13,7 @@ import AVFoundation
 extension WaitViewController{
 
     func startConnection() {
+        print("[DIAG][FLOW] startConnection ENTER waitState=\(waitState) useNewSDK=\(useNewSDK)")
         print("[WAITREQ][RECV] entering function=startConnection useNewSDK=\(useNewSDK)")
         print("[WAITREQ][TIMER] startConnection: called timerIsValid=\(castWaitDialog.requestTimer.isValid) timerCount=\(castWaitDialog.timerCount) requestWaitFlg=\(castWaitDialog.requestWaitFlg)")
         //（一時的異常状態に）初期化する
@@ -1158,27 +1159,22 @@ extension WaitViewController {
 
     /// livePointLbl を currentPoint の値で更新する（メインスレッド保証）
     func updatePointLabel() {
-        print("[DIAG][UI_UPDATE] updatePointLabel called currentPoint=\(self.currentPoint) thread=\(Thread.isMainThread ? "MT" : "BG")")
+        print("[DIAG][UI] updatePointLabel called currentPoint=\(self.currentPoint) thread=\(Thread.isMainThread ? "MT" : "BG")")
         DispatchQueue.main.async { [weak self] in
-            guard let self = self else {
-                print("[DIAG][UI_UPDATE] self deallocated, skip")
-                return
-            }
-            if self.livePointLbl == nil {
-                print("[DIAG][UI_UPDATE] WARN livePointLbl is nil, skip")
-                return
-            }
+            guard let self = self else { return }
+            print("[DIAG][UI] APPLY livePointLbl exists=\(self.livePointLbl != nil)")
+            if self.livePointLbl == nil { return }
             let text = String(UtilFunc.numFormatter(num: self.currentPoint)) + " pt"
             self.livePointLbl.text = text
             self.livePointLbl.adjustsFontSizeToFitWidth = true
             self.livePointLbl.minimumScaleFactor = 0.3
-            print("[DIAG][UI_UPDATE] livePointLbl.text=\"\(text)\"")
         }
     }
 
     /// サーバーからポイントを取得し currentPoint → livePointLbl を更新する
     /// 多重呼び出し時は最新の呼び出しのみ UI に反映する（token 方式）
     func syncLivePoint() {
+        print("[DIAG][SYNC] ENTER user_id=\(self.user_id) thread=\(Thread.isMainThread ? "MT" : "BG")")
         let token = UUID()
         self.syncPointToken = token
         print("[DIAG][SYNC_POINT] START user_id=\(self.user_id) token=\(token) thread=\(Thread.isMainThread ? "MT" : "BG")")
@@ -1198,6 +1194,7 @@ extension WaitViewController {
             self.currentPoint = pt
             print("[DIAG][SYNC_POINT] SUCCESS oldPt=\(oldPt) newPt=\(pt) token=\(token) thread=\(Thread.isMainThread ? "MT" : "BG")")
             self.updatePointLabel()
+            print("[DIAG][SYNC] EXIT currentPoint=\(self.currentPoint)")
         }
     }
 }
@@ -1250,7 +1247,7 @@ extension WaitViewController {
         print("[DIAG][LOGIN_DO] END (call returned)")
 
         // 配信ポイント(累計)をサーバーから同期（旧SDKでは setWait() 内で直接表示していた処理）
-        print("[DIAG][SYNC_POINT] calling from startWaitingUsingNewSDK")
+        print("[DIAG][SYNC_CALL] from=startWaitingUsingNewSDK")
         self.syncLivePoint()
 
         // Firebase conditionRef observer を SkyWay 接続前に設定
@@ -1439,7 +1436,7 @@ extension WaitViewController: SkywaySessionDelegate {
         SkywayManager.sharedManager().connectStart(roomName: roomName, delegate: self)
     }
     func connectSucces() {
-        print("[DIAG][CONNECT] connectSucces ENTER waitState=\(waitState) isLiveConnectionStarted=\(isLiveConnectionStarted) thread=\(Thread.isMainThread ? "MT" : "BG")")
+        print("[DIAG][FLOW] connectSucces ENTER waitState=\(waitState) isLiveConnectionStarted=\(isLiveConnectionStarted)")
         setWaitState(.waiting)
         SkywayManager.sharedManager().setWaitLocal(localView: localStreamView, delegate: self)
         SkywayManager.sharedManager().setRemoteView(remoteView: remoteStreamView)
@@ -1452,7 +1449,7 @@ extension WaitViewController: SkywaySessionDelegate {
 
         print("[READY][connectSucces] before isSkyWayReady=\(isSkyWayReady) isNewSDKReadyForApproval=\(isNewSDKReadyForApproval) waitState=\(waitState) peer=\(peer == nil ? "nil" : "exists")")
         // 再接続時にもポイントを最新化
-        print("[DIAG][SYNC_POINT] calling from connectSucces")
+        print("[DIAG][SYNC_CALL] from=connectSucces")
         self.syncLivePoint()
         print("[NewSDK] WaitViewController: connectSucces - 待機完了 isNewSDKReadyForApproval→true isSkyWayReady=\(isSkyWayReady) isPendingApproval=\(isPendingApproval)")
         isNewSDKReadyForApproval = true
@@ -1479,6 +1476,7 @@ extension WaitViewController: SkywaySessionDelegate {
         }
     }
     func remoteConnectSucces() {
+        print("[DIAG][FLOW] remoteConnectSucces ENTER waitState=\(waitState) isLiveConnectionStarted=\(isLiveConnectionStarted)")
         print("[FLOW][L4] remoteConnectSucces ENTER isLiveConnectionStarted=\(isLiveConnectionStarted) waitState=\(waitState) live_target_user_id=\(appDelegate.live_target_user_id) isNewSDKReadyForApproval=\(isNewSDKReadyForApproval) isSkyWayReady=\(isSkyWayReady)")
         print("[NewSDK] WaitViewController: remoteConnectSucces - ユーザーが参加しました")
         // 多重実行ガード
