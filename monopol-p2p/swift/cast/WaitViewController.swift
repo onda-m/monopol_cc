@@ -879,6 +879,16 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             //print("フォアグラウンド復帰時")
             //self.setup()
 
+            // NewSDKモードでは旧Peer SDKの再作成を完全にスキップ
+            // SKWNavigator.initialize / getUserMedia がNewSDKのカメラソースと競合し
+            // sender.cpp:78 (track assertion) クラッシュの原因となる
+            if self.useNewSDK {
+                print("[DIAG][FG_RESUME] onDidBecomeActive SKIP old peer setup: useNewSDK=true waitState=\(waitState) isSkyWayReady=\(isSkyWayReady) \(SkywayManager.sharedManager().diagPublishState)")
+                // もしタイマーが停止中だったら実行
+                self.startEffectTimer()
+                return
+            }
+
             guard let peer = self.peer else {
                 print("[SKYWAY] onDidBecomeActive: peer is nil, skipping isPeerIdExist (will re-init via setup if needed)")
                 return

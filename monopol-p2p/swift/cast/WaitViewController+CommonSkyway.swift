@@ -13,7 +13,8 @@ import AVFoundation
 extension WaitViewController{
 
     func startConnection() {
-        print("[DIAG][FLOW] startConnection ENTER waitState=\(waitState) useNewSDK=\(useNewSDK) isSkyWayReady=\(isSkyWayReady) \(SkywayManager.sharedManager().diagPublishState)")
+        print("[DIAG][FLOW] startConnection ENTER waitState=\(waitState) useNewSDK=\(useNewSDK) isSkyWayReady=\(isSkyWayReady) peer=\(peer != nil) localStream=\(appDelegate.localStream != nil) \(SkywayManager.sharedManager().diagPublishState)")
+        print("[DIAG][START_CONN] step=enter thread=\(Thread.isMainThread ? "MT" : "BG")")
         print("[WAITREQ][RECV] entering function=startConnection useNewSDK=\(useNewSDK)")
         print("[WAITREQ][TIMER] startConnection: called timerIsValid=\(castWaitDialog.requestTimer.isValid) timerCount=\(castWaitDialog.timerCount) requestWaitFlg=\(castWaitDialog.requestWaitFlg)")
         //（一時的異常状態に）初期化する
@@ -22,8 +23,10 @@ extension WaitViewController{
         self.listenerStatus = 0//重要
 
         self.castSelectedDialog.isHidden = true
+        print("[DIAG][START_CONN] step=before_async_block")
 
         DispatchQueue.main.async {
+            print("[DIAG][START_CONN] step=inside_async_block isReconnect=\(self.isReconnect)")
 
             /*******************************/
             //処理するタイミングをここに変更
@@ -117,8 +120,9 @@ extension WaitViewController{
         //    self.addAudioSessionObservers()
         //}
         //self.addAudioSessionObservers()
+        print("[DIAG][START_CONN] step=exit_complete")
     }
-    
+
     func closeMedia() {
 
         if self.mediaConnection != nil{
@@ -215,6 +219,13 @@ extension WaitViewController{
     
     //type=0:初期化あり(最初一度だけ実行)
     func setup(){
+        // NewSDKモードでは旧Peer SDKの初期化を完全にスキップ
+        // setupStream() 内の SKWNavigator.initialize / getUserMedia が
+        // NewSDKのカメラソース(CameraVideoSource)と競合し sender.cpp:78 クラッシュの原因となる
+        if useNewSDK {
+            print("[DIAG][SETUP] SKIP old peer setup: useNewSDK=true waitState=\(waitState)")
+            return
+        }
         //待機状態へ遷移するためロックする
         /******************************/
         //ロック
@@ -355,6 +366,11 @@ extension WaitViewController {
     /// SkyWay再接続（リクエスト受信時/承認時にisSkyWayReady=falseの場合）
     /// 多重発火防止付き。15秒タイムアウトで1回だけリトライ。2回目失敗でユーザー通知。
     func setupSkyWayReconnect(reason: String) {
+        // NewSDKモードでは旧Peer SDKの再接続は不要
+        if useNewSDK {
+            print("[DIAG][RECONNECT] SKIP setupSkyWayReconnect: useNewSDK=true reason=\(reason)")
+            return
+        }
         // 多重発火防止
         guard !isReconnecting else {
             print("[SKYWAY_RECONNECT] already reconnecting, skip (reason=\(reason))")
