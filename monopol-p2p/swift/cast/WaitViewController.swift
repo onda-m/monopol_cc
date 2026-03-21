@@ -359,6 +359,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
 
         // 配信ポイント: キャッシュから初期表示（API同期前のfallback）
         self.currentPoint = UserDefaults.standard.integer(forKey: "myLivePoint")
+        print("[DIAG][INIT] viewDidLoad fallback currentPoint=\(self.currentPoint) livePointLbl=\(self.livePointLbl != nil ? "exists" : "nil")")
         self.updatePointLabel()
 
         let mainBoundSize: CGSize = UIScreen.main.bounds.size
@@ -1470,6 +1471,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
         print("[VC][LIFECYCLE] viewWillAppear instance=0x\(String(instanceId, radix: 16)) waitState=\(waitState) thread=\(Thread.isMainThread ? "MT" : "BG")")
 
         // サーバーからポイントを同期（画面遷移時に最新値を取得）
+        print("[DIAG][SYNC_POINT] calling from viewWillAppear")
         self.syncLivePoint()
 
         // 子ノード condition への参照

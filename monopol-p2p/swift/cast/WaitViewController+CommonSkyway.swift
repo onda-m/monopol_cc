@@ -1158,11 +1158,21 @@ extension WaitViewController {
 
     /// livePointLbl を currentPoint の値で更新する（メインスレッド保証）
     func updatePointLabel() {
+        print("[DIAG][UI_UPDATE] updatePointLabel called currentPoint=\(self.currentPoint) thread=\(Thread.isMainThread ? "MT" : "BG")")
         DispatchQueue.main.async { [weak self] in
-            guard let self = self, self.livePointLbl != nil else { return }
-            self.livePointLbl.text = String(UtilFunc.numFormatter(num: self.currentPoint)) + " pt"
+            guard let self = self else {
+                print("[DIAG][UI_UPDATE] self deallocated, skip")
+                return
+            }
+            if self.livePointLbl == nil {
+                print("[DIAG][UI_UPDATE] WARN livePointLbl is nil, skip")
+                return
+            }
+            let text = String(UtilFunc.numFormatter(num: self.currentPoint)) + " pt"
+            self.livePointLbl.text = text
             self.livePointLbl.adjustsFontSizeToFitWidth = true
             self.livePointLbl.minimumScaleFactor = 0.3
+            print("[DIAG][UI_UPDATE] livePointLbl.text=\"\(text)\"")
         }
     }
 
@@ -1171,18 +1181,22 @@ extension WaitViewController {
     func syncLivePoint() {
         let token = UUID()
         self.syncPointToken = token
-        print("[Point] syncLivePoint: start token=\(token)")
+        print("[DIAG][SYNC_POINT] START user_id=\(self.user_id) token=\(token) thread=\(Thread.isMainThread ? "MT" : "BG")")
 
         UtilFunc.setMyInfo { [weak self] in
-            guard let self = self else { return }
+            guard let self = self else {
+                print("[DIAG][SYNC_POINT] self deallocated in completion, token=\(token)")
+                return
+            }
             // トークンが一致しなければ、より新しい呼び出しがあるので破棄
             guard self.syncPointToken == token else {
-                print("[Point] syncLivePoint: stale token=\(token) current=\(self.syncPointToken), skip")
+                print("[DIAG][SYNC_POINT] STALE token=\(token) current=\(self.syncPointToken), skip")
                 return
             }
             let pt = UserDefaults.standard.integer(forKey: "myLivePoint")
+            let oldPt = self.currentPoint
             self.currentPoint = pt
-            print("[Point] syncLivePoint: updated pt=\(pt)")
+            print("[DIAG][SYNC_POINT] SUCCESS oldPt=\(oldPt) newPt=\(pt) token=\(token) thread=\(Thread.isMainThread ? "MT" : "BG")")
             self.updatePointLabel()
         }
     }
@@ -1231,10 +1245,12 @@ extension WaitViewController {
 
         // サーバーに待機状態を通知（旧SDKでは setWait() 内の loginDo() で行っていた処理）
         // これがないとリスナー側で reserve_flg/login_status が更新されず「予約申請をすることができません」になる
-        print("[NewSDK] startWaitingUsingNewSDK: loginDo status=1 reserve_flg=\(self.appDelegate.reserveFlg)")
+        print("[DIAG][LOGIN_DO] START user_id=\(self.user_id) reserveFlg=\(self.appDelegate.reserveFlg) maxReserve=\(self.appDelegate.reserveMaxCount) thread=\(Thread.isMainThread ? "MT" : "BG")")
         UtilFunc.loginDo(user_id: self.user_id, status: 1, live_user_id: 0, reserve_flg: Int(self.appDelegate.reserveFlg)!, max_reserve_count: Int(self.appDelegate.reserveMaxCount)!, password: "0")
+        print("[DIAG][LOGIN_DO] END (call returned)")
 
         // 配信ポイント(累計)をサーバーから同期（旧SDKでは setWait() 内で直接表示していた処理）
+        print("[DIAG][SYNC_POINT] calling from startWaitingUsingNewSDK")
         self.syncLivePoint()
 
         // Firebase conditionRef observer を SkyWay 接続前に設定
@@ -1423,6 +1439,7 @@ extension WaitViewController: SkywaySessionDelegate {
         SkywayManager.sharedManager().connectStart(roomName: roomName, delegate: self)
     }
     func connectSucces() {
+        print("[DIAG][CONNECT] connectSucces ENTER waitState=\(waitState) isLiveConnectionStarted=\(isLiveConnectionStarted) thread=\(Thread.isMainThread ? "MT" : "BG")")
         setWaitState(.waiting)
         SkywayManager.sharedManager().setWaitLocal(localView: localStreamView, delegate: self)
         SkywayManager.sharedManager().setRemoteView(remoteView: remoteStreamView)
@@ -1431,9 +1448,11 @@ extension WaitViewController: SkywaySessionDelegate {
         // 旧SDKでは PEER_EVENT_OPEN (line 561,568) で行っていた処理
         UtilFunc.deleteCastLock(cast_id: self.user_id, user_id: self.user_id, type: 1)
         UtilFunc.deleteCastLock(cast_id: self.user_id, user_id: 0, type: 2)
+        print("[DIAG][CONNECT] deleteCastLock done")
 
         print("[READY][connectSucces] before isSkyWayReady=\(isSkyWayReady) isNewSDKReadyForApproval=\(isNewSDKReadyForApproval) waitState=\(waitState) peer=\(peer == nil ? "nil" : "exists")")
         // 再接続時にもポイントを最新化
+        print("[DIAG][SYNC_POINT] calling from connectSucces")
         self.syncLivePoint()
         print("[NewSDK] WaitViewController: connectSucces - 待機完了 isNewSDKReadyForApproval→true isSkyWayReady=\(isSkyWayReady) isPendingApproval=\(isPendingApproval)")
         isNewSDKReadyForApproval = true
