@@ -1539,6 +1539,8 @@ extension WaitViewController: SkywaySessionDelegate {
         // 再接続が必要な場合は connectEnd() 後に別途トリガーする
         isLiveConnectionStarted = false
         isNewSDKReadyForApproval = false
+        isSkyWayReady = false
+        print("[DIAG][RESET] connectDisconnect: isSkyWayReady→false isNewSDKReadyForApproval→false isSessionClosing=\(isSessionClosing)")
         print("[NewSDK] WaitViewController: connectDisconnect - isLiveConnectionStarted=false isNewSDKReadyForApproval→false isSessionClosing=\(isSessionClosing)")
         // isSessionClosing が true のとき（status_listener==3 による強制leave中）は
         // commonWaitDo の Task 内で leaveRoomIfNeeded 完了後に setWaitState を行うため、ここではスキップ
@@ -1566,18 +1568,23 @@ extension WaitViewController: SkywaySessionDelegate {
     func connectEnd() {
         isLiveConnectionStarted = false
         isNewSDKReadyForApproval = false
+        isSkyWayReady = false
+        print("[DIAG][RESET] connectEnd: isSkyWayReady→false isNewSDKReadyForApproval→false")
         print("[NewSDK] WaitViewController: connectEnd - ルームが閉じられました isNewSDKReadyForApproval→false isLiveConnectionStarted=false")
         Task { @MainActor in
             self.setWaitState(.idle)
         }
     }
     func connectError() {
+        print("[DIAG][RESET] connectError ENTER isSkyWayReady=\(isSkyWayReady) isNewSDKReadyForApproval=\(isNewSDKReadyForApproval) isLiveConnectionStarted=\(isLiveConnectionStarted) waitState=\(waitState) \(SkywayManager.sharedManager().diagPublishState)")
         isLiveConnectionStarted = false
+        isSkyWayReady = false
+        isNewSDKReadyForApproval = false
         setWaitState(.idle)
         // 旧SDKでは PEER_EVENT_ERROR でも deleteCastLock を呼んでいた (line 448-449, 461-469)
         UtilFunc.deleteCastLock(cast_id: self.user_id, user_id: self.user_id, type: 1)
         UtilFunc.deleteCastLock(cast_id: self.user_id, user_id: 0, type: 2)
-        print("[NewSDK] WaitViewController: connectError - 接続エラー isNewSDKReadyForApproval→false isSkyWayReady→false isPendingApproval=\(isPendingApproval)")
+        print("[DIAG][RESET] connectError: isSkyWayReady→false isNewSDKReadyForApproval→false isPendingApproval=\(isPendingApproval)")
         DispatchQueue.main.async { [weak self] in
             self?.isNewSDKReadyForApproval = false
             self?.isSkyWayReady = false
@@ -1609,8 +1616,10 @@ extension WaitViewController: CastWaitDialogDelegate {
     /// 承認ボタン押下時にSkyWay準備状態を確認し、準備完了後にcompletionを呼ぶ。
     /// isSkyWayReady=true なら即時実行。false なら pending にして PEER_EVENT_OPEN で再開。
     func castWaitDialogNeedsSkyWayReady(_ dialog: CastWaitDialog, completion: @escaping () -> Void) {
-        let allowApproval = isNewSDKReadyForApproval && isSkyWayReady && waitState == .waiting && !isPendingApproval
-        print("[DIAG][APPROVAL] ENTER isNewSDKReadyForApproval=\(isNewSDKReadyForApproval) isSkyWayReady=\(isSkyWayReady) waitState=\(waitState) isPendingApproval=\(isPendingApproval) allowApproval=\(allowApproval)")
+        let manager = SkywayManager.sharedManager()
+        let sessionHealthy = manager.isSessionHealthy
+        let allowApproval = isNewSDKReadyForApproval && isSkyWayReady && waitState == .waiting && !isPendingApproval && sessionHealthy
+        print("[DIAG][APPROVAL] ENTER isNewSDKReadyForApproval=\(isNewSDKReadyForApproval) isSkyWayReady=\(isSkyWayReady) waitState=\(waitState) isPendingApproval=\(isPendingApproval) sessionHealthy=\(sessionHealthy) allowApproval=\(allowApproval) \(manager.diagPublishState)")
         let callId = pendingRequest?.callId ?? "unknown"
 
         // completion を必ず main thread で実行するラッパー

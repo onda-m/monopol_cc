@@ -49,6 +49,11 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     var diagPublishState: String {
         return "room=\(room == nil ? "nil" : "exists") localMember=\(localMember == nil ? "nil" : "exists") videoStream=\(localVideoStream == nil ? "nil" : "exists") audioStream=\(localAudioStream == nil ? "nil" : "exists") capturing=\(capturingSucceeded) hasPublishedVideo=\(hasPublishedVideo) isPublishingVideo=\(isPublishingVideo) tracksReady=\(localTracksReady)"
     }
+
+    /// approval gate 用: session が健全かどうか
+    var isSessionHealthy: Bool {
+        return room != nil && localMember != nil && localTracksReady && capturingSucceeded
+    }
     private var remoteVideoStream: RemoteVideoStream?
     private var remoteAudioStream: RemoteAudioStream?
     private var remoteDataStream: RemoteDataStream?
@@ -470,7 +475,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             print("[SkyMgr] joinRoomIfNeeded COMPLETE thread=\(Thread.isMainThread ? "MT" : "BG") calling connectSucces")
             sessionDelegate?.connectSucces()
         } catch {
-            print("[SkyMgr] joinRoomIfNeeded ERROR thread=\(Thread.isMainThread ? "MT" : "BG") error=\(error)")
+            print("[SkyMgr] joinRoomIfNeeded ERROR thread=\(Thread.isMainThread ? "MT" : "BG") error=\(error) \(diagPublishState)")
             isConnectStarted = false
             sessionDelegate?.connectError()
         }
@@ -594,7 +599,10 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         localAudioStream = nil
         localDataStream = nil
         capturingSucceeded = false
-        print("[SkyMgr] local streams cleared")
+        hasPublishedVideo = false
+        isPublishingVideo = false
+        localTracksReady = false
+        print("[SkyMgr] local streams cleared hasPublishedVideo→false localTracksReady→false")
 
         // (6) Clear references and reset guards
         self.localMember = nil
