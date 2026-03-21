@@ -159,7 +159,7 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
     /// 現在の配信ポイント（syncLivePoint で同期）
     var currentPoint: Int = 0
     /// syncLivePoint 多重実行制御用トークン（最新の呼び出しのみ UI 反映）
-    private var syncPointToken: UUID = UUID()
+    var syncPointToken: UUID = UUID()
     
     //予約の許可・拒否を選択するボタン
     @IBOutlet weak var reserveFlgBtn: UIButton!

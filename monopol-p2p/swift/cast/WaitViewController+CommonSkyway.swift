@@ -1230,10 +1230,12 @@ extension WaitViewController {
         print("[NewSDK][MVP] startWaitingUsingNewSDK: Firebase userrequest/\(self.user_id) removed")
 
         // サーバーに待機状態を通知（旧SDKでは setWait() 内の loginDo() で行っていた処理）
-<<<<<<< HEAD
         // これがないとリスナー側で reserve_flg/login_status が更新されず「予約申請をすることができません」になる
         print("[NewSDK] startWaitingUsingNewSDK: loginDo status=1 reserve_flg=\(self.appDelegate.reserveFlg)")
         UtilFunc.loginDo(user_id: self.user_id, status: 1, live_user_id: 0, reserve_flg: Int(self.appDelegate.reserveFlg)!, max_reserve_count: Int(self.appDelegate.reserveMaxCount)!, password: "0")
+
+        // 配信ポイント(累計)をサーバーから同期（旧SDKでは setWait() 内で直接表示していた処理）
+        self.syncLivePoint()
 
         // Firebase conditionRef observer を SkyWay 接続前に設定
         // リスナーのリクエストは SkyWay 接続前に Firebase に書き込まれるため、
@@ -1333,14 +1335,6 @@ extension WaitViewController {
                 return
             }
         })
-=======
-        // これがないとリスナー側で reserve_flg が更新されず「予約申請をすることができません」になる
-        UtilFunc.loginDo(user_id: self.user_id, status: 1, live_user_id: 0, reserve_flg: Int(self.appDelegate.reserveFlg)!, max_reserve_count: Int(self.appDelegate.reserveMaxCount)!, password: "0")
-        print("[NewSDK] startWaitingUsingNewSDK: loginDo status=1 reserve_flg=\(self.appDelegate.reserveFlg)")
-
-        // 配信ポイント(累計)をサーバーから同期（旧SDKでは setWait() 内で直接表示していた処理）
-        self.syncLivePoint()
->>>>>>> ca25d08 (start 20260321)
 
         // 待機開始準備中: 配信UIを非表示にし操作を無効化
         // sessionStart → connectSucces() で .waiting になる
@@ -1432,7 +1426,6 @@ extension WaitViewController: SkywaySessionDelegate {
         setWaitState(.waiting)
         SkywayManager.sharedManager().setWaitLocal(localView: localStreamView, delegate: self)
         SkywayManager.sharedManager().setRemoteView(remoteView: remoteStreamView)
-<<<<<<< HEAD
 
         // NewSDK: Room参加 + publish 完了後に CastLock を解除
         // 旧SDKでは PEER_EVENT_OPEN (line 561,568) で行っていた処理
@@ -1440,10 +1433,8 @@ extension WaitViewController: SkywaySessionDelegate {
         UtilFunc.deleteCastLock(cast_id: self.user_id, user_id: 0, type: 2)
 
         print("[READY][connectSucces] before isSkyWayReady=\(isSkyWayReady) isNewSDKReadyForApproval=\(isNewSDKReadyForApproval) waitState=\(waitState) peer=\(peer == nil ? "nil" : "exists")")
-=======
         // 再接続時にもポイントを最新化
         self.syncLivePoint()
->>>>>>> ca25d08 (start 20260321)
         print("[NewSDK] WaitViewController: connectSucces - 待機完了 isNewSDKReadyForApproval→true isSkyWayReady=\(isSkyWayReady) isPendingApproval=\(isPendingApproval)")
         isNewSDKReadyForApproval = true
         Task { @MainActor in
