@@ -50,6 +50,16 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         return "room=\(room == nil ? "nil" : "exists") localMember=\(localMember == nil ? "nil" : "exists") videoStream=\(localVideoStream == nil ? "nil" : "exists") audioStream=\(localAudioStream == nil ? "nil" : "exists") capturing=\(capturingSucceeded) hasPublishedVideo=\(hasPublishedVideo) isPublishingVideo=\(isPublishingVideo) tracksReady=\(localTracksReady)"
     }
 
+    /// contentType の rawValue → 名前変換（SKWContentType: 0=audio, 1=video, 2=data）
+    private func contentTypeName(_ ct: ContentType) -> String {
+        switch ct {
+        case .audio: return "audio(\(ct.rawValue))"
+        case .video: return "video(\(ct.rawValue))"
+        case .data:  return "data(\(ct.rawValue))"
+        @unknown default: return "unknown(\(ct.rawValue))"
+        }
+    }
+
     /// approval gate 用: session が健全かどうか
     var isSessionHealthy: Bool {
         return room != nil && localMember != nil && localTracksReady && capturingSucceeded
@@ -864,11 +874,16 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         // Also check SDK-side subscriptions
         for sub in localMember.subscriptions {
             if sub.publication?.id == pubId {
-                print("[SkyMgr] subscribeToPublication skipped: SDK already has subscription for pubId=\(pubId)")
+                print("[SkyMgr] subscribeToPublication skipped: SDK already has subscription for pubId=\(pubId) stream=\(sub.stream == nil ? "nil" : "exists")")
                 subscribedPublicationIds.insert(pubId)
                 if roomSubscriptions[sub.id] == nil {
                     sub.delegate = self
                     roomSubscriptions[sub.id] = sub
+                    // stream=nil なら attach せず didAttach を待つ
+                    guard sub.stream != nil else {
+                        print("[SkyMgr] subscribeToPublication: existing sub stream=nil, waiting for didAttach subId=\(sub.id)")
+                        return
+                    }
                     handleStreamAttachment(subscription: sub)
                 }
                 return
@@ -879,11 +894,18 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         subscribedPublicationIds.insert(pubId)
 
         do {
-            print("[SkyMgr][subscribe] start pubId=\(pubId) contentType=\(publication.contentType)")
+            let ct = contentTypeName(publication.contentType)
+            print("[SkyMgr][subscribe] start pubId=\(pubId) contentType=\(ct)")
             let subscription = try await localMember.subscribe(publicationId: pubId, options: nil)
             subscription.delegate = self
             roomSubscriptions[subscription.id] = subscription
-            print("[SkyMgr][subscribe] ok subId=\(subscription.id) pubId=\(pubId)")
+            print("[SkyMgr][subscribe] ok subId=\(subscription.id) pubId=\(pubId) stream=\(subscription.stream == nil ? "nil" : "exists")")
+            // stream=nil の場合は handleStreamAttachment に進まない
+            // didAttach callback で stream が届くのを待つ
+            guard subscription.stream != nil else {
+                print("[SkyMgr][subscribe] stream=nil after subscribe, waiting for didAttach subId=\(subscription.id) ct=\(ct)")
+                return
+            }
             handleStreamAttachment(subscription: subscription)
         } catch {
             // Subscription may fail if publication was canceled
@@ -894,11 +916,13 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     @MainActor
     private func handleStreamAttachment(subscription: RoomSubscription) {
-        print("[DIAG][ATTACH] BEFORE stream=\(subscription.stream == nil ? "nil" : "exists") subId=\(subscription.id)")
+        let ct = contentTypeName(subscription.contentType)
+        let pubId = subscription.publication?.id ?? "nil"
+        print("[DIAG][ATTACH] ENTER subId=\(subscription.id) ct=\(ct) pubId=\(pubId) stream=\(subscription.stream == nil ? "nil" : "exists") \(diagPublishState)")
         // stream=nil の場合は即 return（SDK内部 publish 誘発による crash 防止）
         // 「will attach later」ロジックは完全禁止
         guard let stream = subscription.stream else {
-            print("[SkyMgr][attach] BLOCK: stream=nil subId=\(subscription.id) → attach禁止（crash防止）")
+            print("[DIAG][ATTACH] BLOCK: stream=nil subId=\(subscription.id) ct=\(ct) → attach禁止（crash防止）")
             return
         }
         if let videoStream = stream as? RemoteVideoStream {
@@ -1077,11 +1101,11 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     func room(_ room: Room, didPublishStreamOf publication: RoomPublication) {
         Task { @MainActor in
             let pubId = publication.id
-            let contentType = publication.contentType
+            let ct = self.contentTypeName(publication.contentType)
             let publisherId = self.publicationPublisherIdentifier(publication) ?? "nil"
             let localMemberId = self.localMember.map { self.localMemberIdentifier($0) } ?? "nil"
             let isRemote = publisherId != localMemberId
-            print("[DIAG][CB] didPublishStreamOf pubId=\(pubId) contentType=\(contentType) publisherId=\(publisherId) isRemote=\(isRemote) \(self.diagPublishState)")
+            print("[DIAG][CB] didPublishStreamOf pubId=\(pubId) ct=\(ct) publisherId=\(publisherId) localId=\(localMemberId) isRemote=\(isRemote) \(self.diagPublishState)")
             guard self.delegatesAttached else { return }
             guard let localMember = self.localMember else { return }
             if isRemote {
@@ -1134,8 +1158,28 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     func room(_ room: Room, didSubscribePublicationOf subscription: RoomSubscription) {
         Task { @MainActor in
-            print("[DIAG][CB] didSubscribePublicationOf subId=\(subscription.id) contentType=\(subscription.contentType) stream=\(subscription.stream == nil ? "nil" : "exists") \(self.diagPublishState)")
+            let ct = self.contentTypeName(subscription.contentType)
+            let pubId = subscription.publication?.id ?? "nil"
+            let publisherId = subscription.publication?.publisher?.id ?? "nil"
+            let localId = self.localMember.map { self.localMemberIdentifier($0) } ?? "nil"
+            print("[DIAG][CB] didSubscribePublicationOf subId=\(subscription.id) contentType=\(ct) pubId=\(pubId) publisherId=\(publisherId) localId=\(localId) stream=\(subscription.stream == nil ? "nil" : "exists") \(self.diagPublishState)")
             guard self.delegatesAttached else { return }
+
+            // stream=nil の subscription は attach に進めない
+            // P2P Room では subscribe 完了通知が stream 確定より先に届くことがある
+            // この場合 didAttach callback で stream が届くのを待つ
+            // ここで handleStreamAttachment に進むと stream=nil → SDK内部の
+            // track negotiation で sender.cpp:78 (assert(track)) crash の原因になりうる
+            guard subscription.stream != nil else {
+                print("[DIAG][CB] didSubscribePublicationOf SKIP_ATTACH: stream=nil subId=\(subscription.id) ct=\(ct) — waiting for didAttach")
+                // delegate だけ設定して didAttach を待つ
+                if self.roomSubscriptions[subscription.id] == nil {
+                    subscription.delegate = self
+                    self.roomSubscriptions[subscription.id] = subscription
+                }
+                return
+            }
+
             if self.roomSubscriptions[subscription.id] == nil {
                 subscription.delegate = self
                 self.roomSubscriptions[subscription.id] = subscription
