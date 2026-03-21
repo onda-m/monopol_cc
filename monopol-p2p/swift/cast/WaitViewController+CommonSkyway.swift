@@ -1458,32 +1458,65 @@ extension WaitViewController: SkywaySessionDelegate {
         SkywayManager.sharedManager().connectStart(roomName: roomName, delegate: self)
     }
     func connectSucces() {
-        print("[DIAG][FLOW] connectSucces ENTER waitState=\(waitState) isLiveConnectionStarted=\(isLiveConnectionStarted)")
+        let mgr = SkywayManager.sharedManager()
+        let pubInfo = mgr.localPublicationInfo()
+        print("[DIAG][FLOW] connectSucces ENTER waitState=\(waitState) isLiveConnectionStarted=\(isLiveConnectionStarted) \(mgr.diagPublishState)")
+        print("[DIAG][CONNECT] localPublications count=\(pubInfo.count) details=\(pubInfo)")
         setWaitState(.waiting)
-        SkywayManager.sharedManager().setWaitLocal(localView: localStreamView, delegate: self)
-        SkywayManager.sharedManager().setRemoteView(remoteView: remoteStreamView)
+        mgr.setWaitLocal(localView: localStreamView, delegate: self)
+        mgr.setRemoteView(remoteView: remoteStreamView)
 
         // NewSDK: Room参加 + publish 完了後に CastLock を解除
-        // 旧SDKでは PEER_EVENT_OPEN (line 561,568) で行っていた処理
         UtilFunc.deleteCastLock(cast_id: self.user_id, user_id: self.user_id, type: 1)
         UtilFunc.deleteCastLock(cast_id: self.user_id, user_id: 0, type: 2)
         print("[DIAG][CONNECT] deleteCastLock done")
 
         print("[READY][connectSucces] before isSkyWayReady=\(isSkyWayReady) isNewSDKReadyForApproval=\(isNewSDKReadyForApproval) waitState=\(waitState) peer=\(peer == nil ? "nil" : "exists")")
-        // 再接続時にもポイントを最新化
         print("[DIAG][SYNC_CALL] from=connectSucces")
         self.syncLivePoint()
-        // NewSDK: publish 完了 = SkyWay ready（旧SDKでは PEER_EVENT_OPEN でセットしていた）
+
+        // local publication に audio + video が揃っている場合のみ ready
+        // publish() が返っても SDK 内部の sender 構築が未完了の場合があり、
+        // 揃っていない状態で承認 → リスナー subscribe → sender.cpp:78 crash になる
+        let hasVideoPub = pubInfo.contains(where: { $0.contains("video") })
+        let hasAudioPub = pubInfo.contains(where: { $0.contains("audio") })
         isNewSDKReadyForApproval = true
-        isSkyWayReady = true
-        print("[DIAG][READY] connectSucces set isSkyWayReady=true isNewSDKReadyForApproval=\(isNewSDKReadyForApproval) waitState=\(waitState)")
-        print("[NewSDK] WaitViewController: connectSucces - 待機完了 isNewSDKReadyForApproval=true isSkyWayReady=true isPendingApproval=\(isPendingApproval)")
+
+        if hasVideoPub && hasAudioPub {
+            isSkyWayReady = true
+            print("[DIAG][READY] connectSucces isSkyWayReady=true (video+audio pub verified)")
+        } else {
+            isSkyWayReady = false
+            print("[DIAG][READY] connectSucces isSkyWayReady=false hasVideoPub=\(hasVideoPub) hasAudioPub=\(hasAudioPub) — scheduling deferred check")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self = self else { return }
+                let retryInfo = mgr.localPublicationInfo()
+                let retryVideo = retryInfo.contains(where: { $0.contains("video") })
+                let retryAudio = retryInfo.contains(where: { $0.contains("audio") })
+                print("[DIAG][READY] deferred check: pubs=\(retryInfo) hasVideo=\(retryVideo) hasAudio=\(retryAudio) \(mgr.diagPublishState)")
+                guard retryVideo && retryAudio else {
+                    print("[DIAG][READY] deferred: still missing pubs, isSkyWayReady remains false")
+                    return
+                }
+                self.isSkyWayReady = true
+                print("[DIAG][READY] deferred set isSkyWayReady=true")
+                if self.isPendingApproval, let completion = self.pendingApprovalCompletion {
+                    let callId = self.pendingRequest?.callId ?? "unknown"
+                    print("[SKYWAY][APPROVAL] deferred ready, resuming pending approval callId=\(callId)")
+                    self.isPendingApproval = false
+                    self.pendingApprovalCompletion = nil
+                    completion()  // already on main thread (DispatchQueue.main)
+                }
+            }
+        }
+
+        print("[DIAG][READY] connectSucces END isSkyWayReady=\(isSkyWayReady) isNewSDKReadyForApproval=\(isNewSDKReadyForApproval) waitState=\(waitState)")
         Task { @MainActor in
             self.setWaitState(.waiting)
             if self.isPendingApproval, let completion = self.pendingApprovalCompletion {
                 let callId = self.pendingRequest?.callId ?? "unknown"
                 if self.isSkyWayReady {
-                    print("[SKYWAY][APPROVAL] connectSucces: ready, resuming pending approval callId=\(callId) isSkyWayReady=true useNewSDK=\(self.useNewSDK)")
+                    print("[SKYWAY][APPROVAL] connectSucces: ready, resuming pending approval callId=\(callId)")
                     self.isPendingApproval = false
                     self.pendingApprovalCompletion = nil
                     DispatchQueue.main.async { completion() }

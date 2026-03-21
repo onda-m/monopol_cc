@@ -60,6 +60,13 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         }
     }
 
+    /// local publication の contentType 一覧を返す（診断用）
+    func localPublicationInfo() -> [String] {
+        return roomPublications.map { (id, pub) in
+            "\(contentTypeName(pub.contentType)):id=\(id)"
+        }
+    }
+
     /// approval gate 用: session が健全かどうか
     var isSessionHealthy: Bool {
         return room != nil && localMember != nil && localTracksReady && capturingSucceeded
@@ -700,6 +707,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             print("[DIAG][PUBLISH_GATE] skip reason=already_in_roomPublications")
             print("[SkyMgr][safePublish] SKIP: video already in roomPublications (fixing flag)")
             hasPublishedVideo = true
+            print("[DIAG][FLAG] hasPublishedVideo→true reason=already_in_roomPublications")
             return true
         }
         // --- 6. publish 実行 ---
@@ -708,6 +716,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             pub.delegate = self
             roomPublications[pub.id] = pub
             hasPublishedVideo = true
+            print("[DIAG][FLAG] hasPublishedVideo→true reason=safePublishVideo_SUCCESS pubId=\(pub.id)")
             print("[SkyMgr][safePublish] SUCCESS pubId=\(pub.id) hasPublishedVideo→true")
             print("[DIAG][PUBLISH] SUCCESS kind=video")
             attachLocalVideo()
