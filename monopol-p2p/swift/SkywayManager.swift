@@ -24,6 +24,9 @@ protocol SkywaySessionDelegate: AnyObject {
 
 class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublicationDelegate, RoomSubscriptionDelegate, RemoteDataStreamDelegate {
 
+    /// true にすると [SkyMgr][publish]/[prepare]/ListDidChange の詳細ログを出力
+    private let DIAG_VERBOSE = false
+
     private var room: Room?
     private var localMember: LocalRoomMember?
     private var roomPublications: [String: RoomPublication] = [:]
@@ -662,23 +665,19 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     @MainActor
     private func safePublishVideo(localMember: LocalRoomMember) async -> Bool {
         print("[DIAG][PUBLISH] safePublishVideo ENTER localMember=exists room=\(room == nil ? "nil" : "exists") videoStream=\(localVideoStream == nil ? "nil" : "exists") audioStream=\(localAudioStream == nil ? "nil" : "exists") capturing=\(capturingSucceeded) hasPublished=\(hasPublishedVideo) isPublishing=\(isPublishingVideo) tracksReady=\(localTracksReady)")
-        print("[SkyMgr][safePublish] ENTER isPublishingVideo=\(isPublishingVideo) hasPublishedVideo=\(hasPublishedVideo) localTracksReady=\(localTracksReady)")
         // --- 1. 同時実行ロック ---
         guard !isPublishingVideo else {
             print("[DIAG][PUBLISH_GATE] skip reason=isPublishingVideo_true")
-            print("[SkyMgr][safePublish] BLOCK: already publishing")
             return false
         }
         // --- 2. 完了フラグ ---
         guard !hasPublishedVideo else {
             print("[DIAG][PUBLISH_GATE] skip reason=hasPublishedVideo_true")
-            print("[SkyMgr][safePublish] BLOCK: already published (hasPublishedVideo=true)")
             return true
         }
         // --- 3. トラック準備完了チェック（audio + video 両方必須）---
         guard localTracksReady else {
             print("[DIAG][PUBLISH_GATE] skip reason=localTracksReady_false")
-            print("[SkyMgr][safePublish] BLOCK: localTracksReady=false (tracks not generated)")
             return false
         }
         // ロック取得
@@ -688,22 +687,18 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         // --- 4. 個別 stream nil チェック ---
         guard let stream = localVideoStream else {
             print("[DIAG][PUBLISH_GATE] skip reason=localVideoStream_nil")
-            print("[SkyMgr][safePublish] BLOCK: localVideoStream=nil")
             return false
         }
         guard localAudioStream != nil else {
             print("[DIAG][PUBLISH_GATE] skip reason=localAudioStream_nil")
-            print("[SkyMgr][safePublish] BLOCK: localAudioStream=nil (audio track missing)")
             return false
         }
         guard capturingSucceeded else {
             print("[DIAG][PUBLISH_GATE] skip reason=capturingSucceeded_false")
-            print("[SkyMgr][safePublish] BLOCK: capturingSucceeded=false")
             return false
         }
         guard cameraVideoSource != nil else {
             print("[DIAG][PUBLISH_GATE] skip reason=cameraVideoSource_nil")
-            print("[SkyMgr][safePublish] BLOCK: cameraVideoSource=nil (capture source lost)")
             resetVideoStateIfNeeded()
             return false
         }
@@ -711,7 +706,6 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         let alreadyPublished = roomPublications.values.contains(where: { $0.contentType == .video })
         guard !alreadyPublished else {
             print("[DIAG][PUBLISH_GATE] skip reason=already_in_roomPublications")
-            print("[SkyMgr][safePublish] SKIP: video already in roomPublications (fixing flag)")
             hasPublishedVideo = true
             print("[DIAG][FLAG] hasPublishedVideo→true reason=already_in_roomPublications")
             return true
@@ -723,12 +717,10 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             roomPublications[pub.id] = pub
             hasPublishedVideo = true
             print("[DIAG][FLAG] hasPublishedVideo→true reason=safePublishVideo_SUCCESS pubId=\(pub.id)")
-            print("[SkyMgr][safePublish] SUCCESS pubId=\(pub.id) hasPublishedVideo→true")
             print("[DIAG][PUBLISH] SUCCESS kind=video")
             attachLocalVideo()
             return true
         } catch {
-            print("[SkyMgr][safePublish] FAIL error=\(error)")
             print("[DIAG][PUBLISH] FAIL kind=video error=\(error)")
             resetVideoStateIfNeeded()
             return false
@@ -770,21 +762,21 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
 
     @MainActor
     private func publishLocalStreams(localMember: LocalRoomMember) async throws {
-        print("[SkyMgr][publish] ENTER CALLED hasPublishedVideo=\(hasPublishedVideo) localTracksReady=\(localTracksReady) audioStream=\(localAudioStream != nil) videoStream=\(localVideoStream != nil) dataStream=\(localDataStream != nil) capturingOK=\(capturingSucceeded) bgUnpublished=\(videoUnpublishedForBackground)")
+        if DIAG_VERBOSE { print("[SkyMgr][publish] ENTER CALLED hasPublishedVideo=\(hasPublishedVideo) localTracksReady=\(localTracksReady) audioStream=\(localAudioStream != nil) videoStream=\(localVideoStream != nil) dataStream=\(localDataStream != nil) capturingOK=\(capturingSucceeded) bgUnpublished=\(videoUnpublishedForBackground)") }
         await prepareLocalStreamsIfNeeded()
-        print("[SkyMgr][publish] afterPrepare localTracksReady=\(localTracksReady) audioStream=\(localAudioStream != nil) videoStream=\(localVideoStream != nil) dataStream=\(localDataStream != nil) capturingOK=\(capturingSucceeded)")
+        if DIAG_VERBOSE { print("[SkyMgr][publish] afterPrepare localTracksReady=\(localTracksReady) audioStream=\(localAudioStream != nil) videoStream=\(localVideoStream != nil) dataStream=\(localDataStream != nil) capturingOK=\(capturingSucceeded)") }
         // --- Audio ---
         print("[DIAG][PUBLISH] BEFORE AUDIO localAudioStream=\(localAudioStream == nil ? "nil" : "exists") localMember=\(localMember == nil ? "nil" : "exists") room=\(room == nil ? "nil" : "exists")")
         if let localAudioStream = localAudioStream {
-            print("[SkyMgr][publish][AUDIO] >>> CALLING localMember.publish(audio) micSource=\(microphoneAudioSource != nil)")
+            if DIAG_VERBOSE { print("[SkyMgr][publish][AUDIO] >>> CALLING localMember.publish(audio) micSource=\(microphoneAudioSource != nil)") }
             do {
                 let pub = try await localMember.publish(localAudioStream, options: RoomPublicationOptions())
                 pub.delegate = self
                 roomPublications[pub.id] = pub
-                print("[SkyMgr][publish][AUDIO] <<< SUCCESS pubId=\(pub.id)")
+                if DIAG_VERBOSE { print("[SkyMgr][publish][AUDIO] <<< SUCCESS pubId=\(pub.id)") }
                 print("[DIAG][PUBLISH] SUCCESS kind=audio")
             } catch {
-                print("[SkyMgr][publish][AUDIO] <<< FAILED error=\(error)")
+                if DIAG_VERBOSE { print("[SkyMgr][publish][AUDIO] <<< FAILED error=\(error)") }
                 print("[DIAG][PUBLISH] FAIL kind=audio error=\(error)")
             }
         } else {
@@ -793,28 +785,30 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         }
         // --- Video: safePublishVideo のみ（直接 publish 禁止）---
         print("[DIAG][PUBLISH] BEFORE VIDEO localVideoStream=\(localVideoStream == nil ? "nil" : "exists") localMember=\(localMember == nil ? "nil" : "exists") room=\(room == nil ? "nil" : "exists")")
-        print("[SkyMgr][publish][VIDEO] >>> CALLING safePublishVideo")
+        if DIAG_VERBOSE { print("[SkyMgr][publish][VIDEO] >>> CALLING safePublishVideo") }
         let videoOk = await safePublishVideo(localMember: localMember)
-        if !videoOk {
-            print("[SkyMgr][publish][VIDEO] <<< SKIP by safePublishVideo gate")
-        } else {
-            print("[SkyMgr][publish][VIDEO] <<< OK")
+        if DIAG_VERBOSE {
+            if !videoOk {
+                print("[SkyMgr][publish][VIDEO] <<< SKIP by safePublishVideo gate")
+            } else {
+                print("[SkyMgr][publish][VIDEO] <<< OK")
+            }
         }
         // --- Data ---
         if let localDataStream = localDataStream {
-            print("[SkyMgr][publish][DATA] >>> CALLING localMember.publish(data) dataSource=\(dataSource != nil)")
+            if DIAG_VERBOSE { print("[SkyMgr][publish][DATA] >>> CALLING localMember.publish(data) dataSource=\(dataSource != nil)") }
             do {
                 let pub = try await localMember.publish(localDataStream, options: RoomPublicationOptions())
                 pub.delegate = self
                 roomPublications[pub.id] = pub
-                print("[SkyMgr][publish][DATA] <<< SUCCESS pubId=\(pub.id)")
+                if DIAG_VERBOSE { print("[SkyMgr][publish][DATA] <<< SUCCESS pubId=\(pub.id)") }
             } catch {
-                print("[SkyMgr][publish][DATA] <<< FAILED error=\(error)")
+                if DIAG_VERBOSE { print("[SkyMgr][publish][DATA] <<< FAILED error=\(error)") }
             }
         } else {
             print("[SkyMgr][publish][DATA] SKIP stream=nil")
         }
-        print("[SkyMgr][publish] complete total=\(roomPublications.count)")
+        if DIAG_VERBOSE { print("[SkyMgr][publish] complete total=\(roomPublications.count)") }
     }
 
     /// 【3】capturingSucceeded を唯一の video 判定基準とする
@@ -827,7 +821,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
                 microphoneAudioSource = MicrophoneAudioSource()
             }
             localAudioStream = microphoneAudioSource?.createStream()
-            print("[SkyMgr][prepare] audio: source=\(microphoneAudioSource != nil) stream=\(localAudioStream != nil)")
+            if DIAG_VERBOSE { print("[SkyMgr][prepare] audio: source=\(microphoneAudioSource != nil) stream=\(localAudioStream != nil)") }
         }
 
         // --- Video: capturingSucceeded が true なら再生成不要 ---
@@ -840,22 +834,22 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
             if cameraDevice == nil {
                 cameraDevice = CameraVideoSource.supportedCameras().first(where: { $0.position == .front })
             }
-            print("[SkyMgr][prepare] video: cameraDevice=\(cameraDevice != nil) capturingSucceeded=\(capturingSucceeded)")
+            if DIAG_VERBOSE { print("[SkyMgr][prepare] video: cameraDevice=\(cameraDevice != nil) capturingSucceeded=\(capturingSucceeded)") }
             if let device = cameraDevice {
                 do {
                     try await source.startCapturing(with: device, options: nil)
                     capturingSucceeded = true
                     localVideoStream = source.createStream()
-                    print("[SkyMgr][prepare] video: startCapturing OK stream=\(localVideoStream != nil)")
+                    if DIAG_VERBOSE { print("[SkyMgr][prepare] video: startCapturing OK stream=\(localVideoStream != nil)") }
                 } catch {
                     capturingSucceeded = false
                     localVideoStream = nil
-                    print("[SkyMgr][prepare] video: startCapturing FAILED error=\(error) — createStream SKIPPED")
+                    if DIAG_VERBOSE { print("[SkyMgr][prepare] video: startCapturing FAILED error=\(error) — createStream SKIPPED") }
                 }
             } else {
                 capturingSucceeded = false
                 localVideoStream = nil
-                print("[SkyMgr][prepare] video: SKIP no cameraDevice available")
+                if DIAG_VERBOSE { print("[SkyMgr][prepare] video: SKIP no cameraDevice available") }
             }
         }
 
@@ -865,7 +859,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
                 dataSource = DataSource()
             }
             localDataStream = dataSource?.createStream()
-            print("[SkyMgr][prepare] data: source=\(dataSource != nil) stream=\(localDataStream != nil)")
+            if DIAG_VERBOSE { print("[SkyMgr][prepare] data: source=\(dataSource != nil) stream=\(localDataStream != nil)") }
         }
 
         // --- トラック生成完了判定 ---
@@ -873,7 +867,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
         let videoOk = localVideoStream != nil && capturingSucceeded
         let wasReady = localTracksReady
         localTracksReady = audioOk && videoOk
-        print("[SkyMgr][prepare] localTracksReady=\(localTracksReady) (was=\(wasReady)) audioOk=\(audioOk) videoOk=\(videoOk)")
+        if DIAG_VERBOSE { print("[SkyMgr][prepare] localTracksReady=\(localTracksReady) (was=\(wasReady)) audioOk=\(audioOk) videoOk=\(videoOk)") }
     }
 
     @MainActor
@@ -1080,7 +1074,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     func roomMemberListDidChange(_ room: Room) {
-        print("[DIAG][CB] roomMemberListDidChange \(diagPublishState)")
+        if DIAG_VERBOSE { print("[DIAG][CB] roomMemberListDidChange \(diagPublishState)") }
     }
 
     func room(_ room: Room, memberDidJoin member: RoomMember) {
@@ -1114,7 +1108,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     func roomPublicationListDidChange(_ room: Room) {
-        print("[DIAG][CB] roomPublicationListDidChange \(diagPublishState)")
+        if DIAG_VERBOSE { print("[DIAG][CB] roomPublicationListDidChange \(diagPublishState)") }
     }
 
     func room(_ room: Room, didPublishStreamOf publication: RoomPublication) {
@@ -1172,7 +1166,7 @@ class SkywayManager: NSObject, RoomDelegate, LocalRoomMemberDelegate, RoomPublic
     }
 
     func roomSubscriptionListDidChange(_ room: Room) {
-        print("[DIAG][CB] roomSubscriptionListDidChange \(diagPublishState)")
+        if DIAG_VERBOSE { print("[DIAG][CB] roomSubscriptionListDidChange \(diagPublishState)") }
     }
 
     func room(_ room: Room, didSubscribePublicationOf subscription: RoomSubscription) {
