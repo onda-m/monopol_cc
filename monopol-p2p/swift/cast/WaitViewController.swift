@@ -886,6 +886,8 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
                 print("[DIAG][FG_RESUME] onDidBecomeActive SKIP old peer setup: useNewSDK=true waitState=\(waitState) isSkyWayReady=\(isSkyWayReady) \(SkywayManager.sharedManager().diagPublishState)")
                 // もしタイマーが停止中だったら実行
                 self.startEffectTimer()
+                // FG復帰時に pending request を再チェック（BG中に届いた request を拾う）
+                self.checkPendingRequestOnResume()
                 return
             }
 
@@ -927,7 +929,51 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
             self.startEffectTimer()
         }
     }
-    
+
+    /// FG復帰時に Firebase から pending request を1回読みして、未処理の request があればダイアログ表示する
+    func checkPendingRequestOnResume() {
+        let ref = self.rootRef.child(Util.INIT_FIREBASE + "/" + String(self.user_id))
+        print("[WAITREQ][FG_RESUME] checkPendingRequestOnResume start path=\(ref.url)")
+        ref.observeSingleEvent(of: .value) { [weak self] snap in
+            guard let self = self else { return }
+            print("[WAITREQ][FG_RESUME] snapshot exists=\(snap.exists()) childrenCount=\(snap.childrenCount)")
+            guard snap.exists() else { return }
+
+            for item in snap.children {
+                guard let snapshot = item as? DataSnapshot,
+                      let dict = snapshot.value as? [String: Any] else { continue }
+
+                let rawUserId = dict["user_id"]
+                guard let getUserId = (rawUserId as? Int) ?? Int("\(rawUserId ?? "")") else { continue }
+                let rawCastId = dict["cast_id"]
+                guard let getCastId = (rawCastId as? Int) ?? Int("\(rawCastId ?? "")") else { continue }
+                let rawStatus = dict["status"]
+                guard let getStatus = (rawStatus as? Int) ?? Int("\(rawStatus ?? "")") else { continue }
+
+                if self.user_id == getCastId && getStatus == 1 {
+                    let callId = String(UUID().uuidString.prefix(6))
+                    print("[WAITREQ][FG_RESUME][\(callId)] found pending request user_id=\(getUserId) cast_id=\(getCastId)")
+
+                    self.castWaitDialog.get_user_id = getUserId
+                    self.castWaitDialog.get_cast_id = getCastId
+                    self.castWaitDialog.status = getStatus
+                    self.castWaitDialog.get_user_name = dict["user_name"] as? String
+                    let rawPhotoFlg = dict["user_photo_flg"]
+                    self.castWaitDialog.get_user_photo_flg = (rawPhotoFlg as? Int) ?? Int("\(rawPhotoFlg ?? "")") ?? 0
+                    self.castWaitDialog.get_user_photo_name = dict["user_photo_name"] as? String
+
+                    self.pendingRequest = (callId: callId, cast_id: getCastId, user_id: getUserId, status: getStatus, user_name: self.castWaitDialog.get_user_name, photo_flg: self.castWaitDialog.get_user_photo_flg, photo_name: self.castWaitDialog.get_user_photo_name)
+
+                    DispatchQueue.main.async {
+                        print("[WAITREQ][FG_RESUME][\(callId)] requestDialogDo invoked")
+                        self.castWaitDialog.requestDialogDo()
+                    }
+                    break  // 1件目のみ処理
+                }
+            }
+        }
+    }
+
     /*
     @objc func viewWillEnterForeground(_ notification: Notification?) {
         if (self.isViewLoaded && (self.view.window != nil)) {
