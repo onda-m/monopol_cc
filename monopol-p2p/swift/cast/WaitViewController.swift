@@ -13,6 +13,7 @@ import ReverseExtension
 import Firebase
 import FirebaseAuth
 import FirebaseDatabase
+import UserNotifications
 //import SwiftyGif
 
 class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabBarDelegate,UICollectionViewDataSource,UICollectionViewDelegate,UICollectionViewDelegateFlowLayout {
@@ -1620,6 +1621,33 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
 
                     // pendingRequest に保存（SkyWay状態に関わらず）
                     self.pendingRequest = (callId: callId, cast_id: getCastId, user_id: getUserId, status: getStatus, user_name: self.castWaitDialog.get_user_name, photo_flg: self.castWaitDialog.get_user_photo_flg, photo_name: self.castWaitDialog.get_user_photo_name)
+
+                    // BG中はローカル通知を発行（observer が生きている〜30秒間のみ有効）
+                    // ※安定した BG通知には別途 FCM push（Phase 2B）が必要
+                    let appState = UIApplication.shared.applicationState
+                    print("[WAITREQ][\(callId)] appState=\(appState.rawValue) (0=active,1=inactive,2=background)")
+                    if appState != .active {
+                        let userName = dict["user_name"] as? String ?? "ユーザー"
+                        print("[WAITREQ][\(callId)] BG detected, scheduling local notification for user=\(userName)")
+                        let content = UNMutableNotificationContent()
+                        content.title = "リクエスト"
+                        content.body = "\(userName)さんからリクエストが届きました"
+                        content.sound = .default
+                        content.userInfo = ["user_id": getUserId, "cast_id": getCastId]
+                        let req = UNNotificationRequest(
+                            identifier: "request_\(getUserId)_\(Int(Date().timeIntervalSince1970))",
+                            content: content,
+                            trigger: nil)
+                        UNUserNotificationCenter.current().add(req) { error in
+                            if let error = error {
+                                print("[WAITREQ][\(callId)] local notification error: \(error)")
+                            } else {
+                                print("[WAITREQ][\(callId)] local notification scheduled")
+                            }
+                        }
+                        // pendingRequest は保存済み → FG復帰時に checkPendingRequestOnResume で拾う
+                        continue
+                    }
 
                     if self.isSkyWayReady, let peer = self.peer {
                         // SkyWay準備済み → 既存フロー

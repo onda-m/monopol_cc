@@ -784,8 +784,8 @@ extension AppDelegate : UNUserNotificationCenterDelegate {
         // Print full message.
         //print(userInfo)
         
-        // Change this to your preferred presentation option
-        completionHandler([])
+        // FG時でもローカル通知のバナー・サウンドを表示する
+        completionHandler([.alert, .sound])
     }
     
     // 通知を開いた時に呼ばれるメソッド
