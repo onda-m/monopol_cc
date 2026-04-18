@@ -686,6 +686,43 @@ extension WaitViewController{
         }
     }
 
+    // receiver出力時のみスピーカーへ切り替え（イヤホン/Bluetooth接続時はスキップ）
+    func forceSpeakerOnlyWhenNoExternalRoute(reason: String) {
+        let session = AVAudioSession.sharedInstance()
+        let outputs = session.currentRoute.outputs
+
+        let hasExternalOutput = outputs.contains { output in
+            switch output.portType {
+            case .headphones, .bluetoothA2DP, .bluetoothHFP, .bluetoothLE:
+                return true
+            default:
+                return false
+            }
+        }
+
+        let hasReceiver = outputs.contains { $0.portType == .builtInReceiver }
+
+        print("[AudioSession] forceSpeaker check reason=\(reason)")
+        print("[AudioSession] current outputs: \(outputs.map { "\($0.portType.rawValue):\($0.portName)" })")
+
+        guard !hasExternalOutput else {
+            print("[AudioSession] skip force speaker: external output exists")
+            return
+        }
+
+        guard hasReceiver else {
+            print("[AudioSession] skip force speaker: receiver is not current output")
+            return
+        }
+
+        do {
+            try session.overrideOutputAudioPort(.speaker)
+            print("[AudioSession] forced speaker output")
+        } catch {
+            print("[AudioSession] force speaker failed: \(error)")
+        }
+    }
+
     // 電話による割り込みと、オーディオルートの変化を監視します
     func addAudioSessionObservers() {
         //UtilLog.printf(str:"オーディオルートの設定（ストリーマー側）")
@@ -712,9 +749,10 @@ extension WaitViewController{
         DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1) {
             // headphone
             self.appDelegate.localStream?.setEnableAudioTrack(0, enable: true)
+            self.forceSpeakerOnlyWhenNoExternalRoute(reason: "audioSessionRouteChanged+1s")
         }
     }
-    
+
     /*
     // イヤホン（ヘッドホン出力）の場合
     func remoteAudioDefault() {
@@ -1581,6 +1619,11 @@ extension WaitViewController: SkywaySessionDelegate {
         Task { @MainActor in
             self.setWaitState(.connected)
             self.startConnection()
+            // SkyWay SDK が AudioSession を上書きした後にスピーカー補正
+            self.configureAudioSessionForSpeaker()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                self.forceSpeakerOnlyWhenNoExternalRoute(reason: "remoteConnectSucces+1s")
+            }
             // NewSDK: 旧SDK の DATACONNECTION_EVENT_OPEN で行っていたタイマー起動を補完
             if !self.timerLive.isValid {
                 if self.appDelegate.reserveStatus == "1" {

@@ -1286,6 +1286,65 @@ extension MediaConnectionViewController: SkywaySessionDelegate {
             SkywayManager.sharedManager().setRemoteView(remoteView: self.remoteStreamView)
         }
         self.addAudioSessionObservers()
+        self.observeCastLivePointForRoomSDK()
+    }
+
+    /// Room SDK用: Firebase cast_live_point を監視して livePointLbl を更新
+    private func observeCastLivePointForRoomSDK() {
+        self.user_id = UserDefaults.standard.integer(forKey: "user_id")
+
+        guard !self.liveCastId.isEmpty else {
+            print("[LivePoint][RoomSDK] skip: liveCastId is empty")
+            return
+        }
+
+        guard self.user_id != 0 else {
+            print("[LivePoint][RoomSDK] skip: user_id is 0")
+            return
+        }
+
+        let ref = self.rootRef.child(Util.INIT_FIREBASE + "/" + self.liveCastId + "/" + String(self.user_id))
+        print("[LivePoint][RoomSDK] observe path=\(ref.url)")
+
+        // 重複observe防止: 既存handleを解除してから再登録
+        if self.handle != 0 {
+            self.conditionRef.removeObserver(withHandle: self.handle)
+        }
+
+        self.conditionRef = ref
+        self.handle = ref.observe(.value, with: { [weak self] snap in
+            guard let self = self else { return }
+
+            guard snap.exists(), let dict = snap.value as? [String: Any] else {
+                print("[LivePoint][RoomSDK] snapshot empty or invalid")
+                return
+            }
+
+            let rawPoint = dict["cast_live_point"]
+            let point: Int?
+
+            if let v = rawPoint as? Int {
+                point = v
+            } else if let v = rawPoint as? NSNumber {
+                point = v.intValue
+            } else if let v = rawPoint as? String {
+                point = Int(v)
+            } else {
+                point = nil
+            }
+
+            guard let point = point else {
+                print("[LivePoint][RoomSDK] cast_live_point missing or invalid: \(String(describing: rawPoint))")
+                return
+            }
+
+            self.temp_cast_live_point = point
+
+            DispatchQueue.main.async {
+                self.livePointLbl.text = UtilFunc.numFormatter(num: point) + " pt"
+                print("[LivePoint][RoomSDK] updated livePointLbl: \(point) pt")
+            }
+        })
     }
     func connectDisconnect() {
         print("[NewSDK] MediaConnectionViewController: connectDisconnect room=\(self.targetRoomName) cast=\(self.liveCastId) user=\(self.user_id)")
