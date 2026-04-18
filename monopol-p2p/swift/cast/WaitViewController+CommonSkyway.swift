@@ -662,22 +662,50 @@ extension WaitViewController{
 
     /***************************/
     /***************************/
+    // AVAudioSession をスピーカー優先で設定（イヤホン/Bluetooth接続時はそちらを優先）
+    func configureAudioSessionForSpeaker() {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(
+                .playAndRecord,
+                mode: .videoChat,
+                options: [
+                    .defaultToSpeaker,
+                    .allowBluetooth,
+                    .allowBluetoothA2DP
+                ]
+            )
+            try session.setActive(true)
+            let outputs = session.currentRoute.outputs.map { "\($0.portType.rawValue):\($0.portName)" }
+            let inputs = session.currentRoute.inputs.map { "\($0.portType.rawValue):\($0.portName)" }
+            print("[AudioSession] configured (Cast)")
+            print("[AudioSession] inputs: \(inputs)")
+            print("[AudioSession] outputs: \(outputs)")
+        } catch {
+            print("[AudioSession] configure failed (Cast): \(error)")
+        }
+    }
+
     // 電話による割り込みと、オーディオルートの変化を監視します
     func addAudioSessionObservers() {
         //UtilLog.printf(str:"オーディオルートの設定（ストリーマー側）")
-        
+
         //let center = NotificationCenter.default
-        //self.center.removeObserver(self)
+        self.center.removeObserver(self, name: AVAudioSession.interruptionNotification, object: nil)
+        self.center.removeObserver(self, name: AVAudioSession.routeChangeNotification, object: nil)
         self.center.addObserver(self, selector: #selector(audioSessionRouteChanged(_:)), name: AVAudioSession.interruptionNotification, object: nil)
         self.center.addObserver(self, selector: #selector(audioSessionRouteChanged(_:)), name: AVAudioSession.routeChangeNotification, object: nil)
     }
-    
+
     // Audio Session Route Change : ルートが変化した(ヘッドフォンが抜き差しされた)
     @objc func audioSessionRouteChanged(_ notification: Notification) {
-        //ヘッドフォン端子に何らかの変化があった場合
-        //UtilLog.printf(str:"変化あり")
-        //self.remoteAudioDefault()
-        
+        let session = AVAudioSession.sharedInstance()
+        let outputs = session.currentRoute.outputs.map { "\($0.portType.rawValue):\($0.portName)" }
+        let inputs = session.currentRoute.inputs.map { "\($0.portType.rawValue):\($0.portName)" }
+        print("[AudioSession] route changed (Cast)")
+        print("[AudioSession] inputs: \(inputs)")
+        print("[AudioSession] outputs: \(outputs)")
+
         //ヘッドフォン端子に何らかの変化があった場合
         //停止して1秒後に再始動を行う
         self.appDelegate.localStream?.setEnableAudioTrack(0, enable: false)
@@ -1455,6 +1483,8 @@ extension WaitViewController: SkywaySessionDelegate {
         // TODO: use stable castId as roomName
         let roomName = peerId
         print("[NewSDK] WaitViewController: joining room as host, roomName=\(roomName)")
+        self.configureAudioSessionForSpeaker()
+        self.addAudioSessionObservers()
         SkywayManager.sharedManager().connectStart(roomName: roomName, delegate: self)
     }
     func connectSucces() {

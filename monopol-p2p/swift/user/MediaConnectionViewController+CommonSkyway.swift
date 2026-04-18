@@ -205,13 +205,38 @@ extension MediaConnectionViewController{
     
     /***************************/
     /***************************/
+    // AVAudioSession をスピーカー優先で設定（イヤホン/Bluetooth接続時はそちらを優先）
+    func configureAudioSessionForSpeaker() {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(
+                .playAndRecord,
+                mode: .videoChat,
+                options: [
+                    .defaultToSpeaker,
+                    .allowBluetooth,
+                    .allowBluetoothA2DP
+                ]
+            )
+            try session.setActive(true)
+            let outputs = session.currentRoute.outputs.map { "\($0.portType.rawValue):\($0.portName)" }
+            let inputs = session.currentRoute.inputs.map { "\($0.portType.rawValue):\($0.portName)" }
+            print("[AudioSession] configured (Listener)")
+            print("[AudioSession] inputs: \(inputs)")
+            print("[AudioSession] outputs: \(outputs)")
+        } catch {
+            print("[AudioSession] configure failed (Listener): \(error)")
+        }
+    }
+
     // 電話による割り込みと、オーディオルートの変化を監視します
     func addAudioSessionObservers() {
         AVAudioSession.sharedInstance()
         //UtilLog.printf(str:"オーディオルートの設定（通る？）")
-        
+
         //let center = NotificationCenter.default
-        //self.center.removeObserver(self)
+        self.center.removeObserver(self, name: AVAudioSession.interruptionNotification, object: nil)
+        self.center.removeObserver(self, name: AVAudioSession.routeChangeNotification, object: nil)
         self.center.addObserver(self, selector: #selector(audioSessionRouteChanged(_:)), name: AVAudioSession.interruptionNotification, object: nil)
         self.center.addObserver(self, selector: #selector(audioSessionRouteChanged(_:)), name: AVAudioSession.routeChangeNotification, object: nil)
     }
@@ -227,10 +252,17 @@ extension MediaConnectionViewController{
     
     /// Audio Session Route Change : ルートが変化した(ヘッドフォンが抜き差しされた)
     @objc func audioSessionRouteChanged(_ notification: Notification) {
+        let session = AVAudioSession.sharedInstance()
+        let outputs = session.currentRoute.outputs.map { "\($0.portType.rawValue):\($0.portName)" }
+        let inputs = session.currentRoute.inputs.map { "\($0.portType.rawValue):\($0.portName)" }
+        print("[AudioSession] route changed (Listener)")
+        print("[AudioSession] inputs: \(inputs)")
+        print("[AudioSession] outputs: \(outputs)")
+
         //ヘッドフォン端子に何らかの変化があった場合
         //現在の配信を停止して1秒後に再始動を行う
         self.remoteStream?.setEnableAudioTrack(0, enable: false)
-        
+
         DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1) {
             // headphone
             self.remoteStream?.setEnableAudioTrack(0, enable: true)
@@ -1220,6 +1252,8 @@ extension MediaConnectionViewController {
     func joinRoomUsingNewSDK(roomName: String) {
         // TODO: use stable castId as roomName (現在はキャストのpeerId=UUIDを使用)
         print("[NewSDK][Phase2-4a] joinRoomUsingNewSDK called roomName=\(roomName)")
+        self.configureAudioSessionForSpeaker()
+        self.addAudioSessionObservers()
         SkywayManager.sharedManager().setRemoteView(remoteView: self.remoteStreamView)
         SkywayManager.sharedManager().connectStart(roomName: roomName, delegate: self)
     }
