@@ -931,10 +931,64 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
         }
     }
 
-    /// FG復帰時に Firebase から pending request を1回読みして、未処理の request があればダイアログ表示する
+    /// FG復帰時に pending request を読んでダイアログ表示する
+    /// 優先順: ① push 経由（UserDefaults） → ② Firebase observeSingleEvent
     func checkPendingRequestOnResume() {
+        print("[WAITREQ][FG_RESUME] checkPendingRequestOnResume start")
+
+        // ① push 経由の pending request を優先チェック
+        if let pending = UserDefaults.standard.dictionary(forKey: "pending_push_request") {
+            UserDefaults.standard.removeObject(forKey: "pending_push_request")
+            print("[WAITREQ][FG_RESUME] found pending_push_request in UserDefaults: \(pending)")
+
+            let rawUserId = pending["user_id"]
+            guard let getUserId = (rawUserId as? Int) ?? Int("\(rawUserId ?? "")") else {
+                print("[WAITREQ][FG_RESUME] invalid user_id in push pending, falling through to Firebase")
+                self.checkPendingRequestFromFirebase()
+                return
+            }
+            let rawCastId = pending["cast_id"]
+            let getCastId = (rawCastId as? Int) ?? Int("\(rawCastId ?? "")") ?? 0
+
+            // 自分宛てか確認
+            guard self.user_id == getCastId else {
+                print("[WAITREQ][FG_RESUME] push pending cast_id=\(getCastId) != self.user_id=\(self.user_id), falling through")
+                self.checkPendingRequestFromFirebase()
+                return
+            }
+
+            let callId = String(UUID().uuidString.prefix(6))
+            let userName = pending["user_name"] as? String
+            let rawPhotoFlg = pending["user_photo_flg"]
+            let photoFlg = (rawPhotoFlg as? Int) ?? Int("\(rawPhotoFlg ?? "")") ?? 0
+            let photoName = pending["user_photo_name"] as? String
+
+            print("[WAITREQ][FG_RESUME][\(callId)] from push: user_id=\(getUserId) cast_id=\(getCastId) user_name=\(userName ?? "nil")")
+
+            self.castWaitDialog.get_user_id = getUserId
+            self.castWaitDialog.get_cast_id = getCastId
+            self.castWaitDialog.status = 1
+            self.castWaitDialog.get_user_name = userName
+            self.castWaitDialog.get_user_photo_flg = photoFlg
+            self.castWaitDialog.get_user_photo_name = photoName
+
+            self.pendingRequest = (callId: callId, cast_id: getCastId, user_id: getUserId, status: 1, user_name: userName, photo_flg: photoFlg, photo_name: photoName)
+
+            DispatchQueue.main.async {
+                print("[WAITREQ][FG_RESUME][\(callId)] requestDialogDo invoked (from push)")
+                self.castWaitDialog.requestDialogDo()
+            }
+            return
+        }
+
+        // ② push が無ければ Firebase から読む（既存フォールバック）
+        self.checkPendingRequestFromFirebase()
+    }
+
+    /// Firebase observeSingleEvent で pending request を読む（フォールバック）
+    private func checkPendingRequestFromFirebase() {
         let ref = self.rootRef.child(Util.INIT_FIREBASE + "/" + String(self.user_id))
-        print("[WAITREQ][FG_RESUME] checkPendingRequestOnResume start path=\(ref.url)")
+        print("[WAITREQ][FG_RESUME] checkPendingRequestFromFirebase path=\(ref.url)")
         ref.observeSingleEvent(of: .value) { [weak self] snap in
             guard let self = self else { return }
             print("[WAITREQ][FG_RESUME] snapshot exists=\(snap.exists()) childrenCount=\(snap.childrenCount)")
@@ -966,10 +1020,10 @@ class WaitViewController: UIViewController, AVCapturePhotoCaptureDelegate,UITabB
                     self.pendingRequest = (callId: callId, cast_id: getCastId, user_id: getUserId, status: getStatus, user_name: self.castWaitDialog.get_user_name, photo_flg: self.castWaitDialog.get_user_photo_flg, photo_name: self.castWaitDialog.get_user_photo_name)
 
                     DispatchQueue.main.async {
-                        print("[WAITREQ][FG_RESUME][\(callId)] requestDialogDo invoked")
+                        print("[WAITREQ][FG_RESUME][\(callId)] requestDialogDo invoked (from Firebase)")
                         self.castWaitDialog.requestDialogDo()
                     }
-                    break  // 1件目のみ処理
+                    break
                 }
             }
         }

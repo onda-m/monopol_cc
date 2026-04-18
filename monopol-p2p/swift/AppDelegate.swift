@@ -710,40 +710,64 @@ class AppDelegate: UIResponder, UIApplicationDelegate ,PurchaseManagerDelegate {
 
     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
-        // If you are receiving a notification message while your app is in the background,
-        // this callback will not be fired till the user taps on the notification launching the application.
-        // TODO: Handle data of notification
-        // With swizzling disabled you must let Messaging know about the message, for Analytics
-        // Messaging.messaging().appDidReceiveMessage(userInfo)
-        
-        // Print message ID.
-        if let messageID = userInfo[gcmMessageIDKey] {
-            print("Message ID: \(messageID)")
-        }
-        
-        // Print full message.
-        //print(userInfo)
-        
-        /*
-        print("Push通知から起動")
-        
-        switch application.applicationState {
-        case .inactive:
-            // アプリがバックグラウンドにいる状態で、Push通知から起動したとき
-            Util.toTalkTopViewController()
-            break
-            
-        case .active:
-            // アプリ起動時にPush通知を受信したとき
-            break
-            
-        case .background:
-            // アプリがバックグラウンドにいる状態でPush通知を受信したとき
-            break
+        print("[FCM_RECV] didReceiveRemoteNotification userInfo=\(userInfo) appState=\(application.applicationState.rawValue)")
 
+        if let messageID = userInfo[gcmMessageIDKey] {
+            print("[FCM_RECV] Message ID: \(messageID)")
         }
-        */
-        
+
+        // request push 以外は従来通りスルー
+        guard let type = userInfo["type"] as? String, type == "request" else {
+            completionHandler(UIBackgroundFetchResult.noData)
+            return
+        }
+
+        // payload パース（FCM data payload は全て String で届く）
+        let rawUserId = userInfo["user_id"]
+        guard let userId = (rawUserId as? Int) ?? Int("\(rawUserId ?? "")") else {
+            print("[FCM_RECV] invalid user_id: \(rawUserId as Any)")
+            completionHandler(UIBackgroundFetchResult.failed)
+            return
+        }
+        let rawCastId = userInfo["cast_id"]
+        let castId = (rawCastId as? Int) ?? Int("\(rawCastId ?? "")") ?? 0
+        let userName = userInfo["user_name"] as? String ?? "ユーザー"
+        let rawPhotoFlg = userInfo["user_photo_flg"]
+        let photoFlg = (rawPhotoFlg as? Int) ?? Int("\(rawPhotoFlg ?? "")") ?? 0
+        let photoName = userInfo["user_photo_name"] as? String ?? ""
+
+        print("[FCM_RECV] request push: user_id=\(userId) cast_id=\(castId) user_name=\(userName)")
+
+        // UserDefaults に保存（WaitViewController が FG 復帰時に読む）
+        let pending: [String: Any] = [
+            "user_id": userId,
+            "cast_id": castId,
+            "user_name": userName,
+            "user_photo_flg": photoFlg,
+            "user_photo_name": photoName,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        UserDefaults.standard.set(pending, forKey: "pending_push_request")
+        print("[FCM_RECV] saved pending_push_request")
+
+        // ローカル通知を発行（BG中のバナー+音）
+        let content = UNMutableNotificationContent()
+        content.title = "リクエスト"
+        content.body = "\(userName)さんからリクエストが届きました"
+        content.sound = .default
+        content.userInfo = ["type": "request", "user_id": userId, "cast_id": castId]
+        let request = UNNotificationRequest(
+            identifier: "fcm_req_\(userId)_\(Int(Date().timeIntervalSince1970))",
+            content: content,
+            trigger: nil)
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("[FCM_RECV] local notification error: \(error)")
+            } else {
+                print("[FCM_RECV] local notification scheduled")
+            }
+        }
+
         completionHandler(UIBackgroundFetchResult.newData)
     }
     // [END receive_message]
