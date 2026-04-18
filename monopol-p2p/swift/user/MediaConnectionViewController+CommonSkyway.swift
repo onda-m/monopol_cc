@@ -229,6 +229,16 @@ extension MediaConnectionViewController{
         }
     }
 
+    // AudioSession の現在ルートをログ出力
+    func logCurrentAudioRouteForListener(reason: String) {
+        let session = AVAudioSession.sharedInstance()
+        let inputs = session.currentRoute.inputs.map { "\($0.portType.rawValue):\($0.portName)" }
+        let outputs = session.currentRoute.outputs.map { "\($0.portType.rawValue):\($0.portName)" }
+        print("[AudioSession][Listener] route check reason=\(reason)")
+        print("[AudioSession][Listener] inputs: \(inputs)")
+        print("[AudioSession][Listener] outputs: \(outputs)")
+    }
+
     // 電話による割り込みと、オーディオルートの変化を監視します
     func addAudioSessionObservers() {
         AVAudioSession.sharedInstance()
@@ -266,9 +276,10 @@ extension MediaConnectionViewController{
         DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1) {
             // headphone
             self.remoteStream?.setEnableAudioTrack(0, enable: true)
+            self.logCurrentAudioRouteForListener(reason: "audioSessionRouteChanged+1s")
         }
     }
-    
+
     /// Audio Session Route Change : ルートが変化した(ヘッドフォンが抜き差しされた)
     @objc func audioSessionRouteChangedAuto(_ notification: Notification) {
         //ヘッドフォン端子に何らかの変化があった場合
@@ -1253,6 +1264,7 @@ extension MediaConnectionViewController {
         // TODO: use stable castId as roomName (現在はキャストのpeerId=UUIDを使用)
         print("[NewSDK][Phase2-4a] joinRoomUsingNewSDK called roomName=\(roomName)")
         self.configureAudioSessionForSpeaker()
+        self.logCurrentAudioRouteForListener(reason: "joinRoomUsingNewSDK after configureAudioSession")
         self.addAudioSessionObservers()
         SkywayManager.sharedManager().setRemoteView(remoteView: self.remoteStreamView)
         SkywayManager.sharedManager().connectStart(roomName: roomName, delegate: self)
@@ -1286,6 +1298,10 @@ extension MediaConnectionViewController: SkywaySessionDelegate {
             SkywayManager.sharedManager().setRemoteView(remoteView: self.remoteStreamView)
         }
         self.addAudioSessionObservers()
+        self.logCurrentAudioRouteForListener(reason: "remoteConnectSucces immediate")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            self.logCurrentAudioRouteForListener(reason: "remoteConnectSucces+1s")
+        }
         self.observeCastLivePointForRoomSDK()
     }
 
