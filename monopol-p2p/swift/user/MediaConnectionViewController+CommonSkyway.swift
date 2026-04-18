@@ -229,6 +229,43 @@ extension MediaConnectionViewController{
         }
     }
 
+    // receiver出力時のみスピーカーへ切り替え（イヤホン/Bluetooth接続時はスキップ）
+    func forceSpeakerOnlyWhenNoExternalRoute(reason: String) {
+        let session = AVAudioSession.sharedInstance()
+        let outputs = session.currentRoute.outputs
+
+        let hasExternalOutput = outputs.contains { output in
+            switch output.portType {
+            case .headphones, .bluetoothA2DP, .bluetoothHFP, .bluetoothLE:
+                return true
+            default:
+                return false
+            }
+        }
+
+        let hasReceiver = outputs.contains { $0.portType == .builtInReceiver }
+
+        print("[AudioSession] forceSpeaker check (Listener) reason=\(reason)")
+        print("[AudioSession] current outputs (Listener): \(outputs.map { "\($0.portType.rawValue):\($0.portName)" })")
+
+        guard !hasExternalOutput else {
+            print("[AudioSession] skip force speaker (Listener): external output exists")
+            return
+        }
+
+        guard hasReceiver else {
+            print("[AudioSession] skip force speaker (Listener): receiver is not current output")
+            return
+        }
+
+        do {
+            try session.overrideOutputAudioPort(.speaker)
+            print("[AudioSession] forced speaker output (Listener)")
+        } catch {
+            print("[AudioSession] force speaker failed (Listener): \(error)")
+        }
+    }
+
     // AudioSession の現在ルートをログ出力
     func logCurrentAudioRouteForListener(reason: String) {
         let session = AVAudioSession.sharedInstance()
@@ -276,7 +313,9 @@ extension MediaConnectionViewController{
         DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1) {
             // headphone
             self.remoteStream?.setEnableAudioTrack(0, enable: true)
-            self.logCurrentAudioRouteForListener(reason: "audioSessionRouteChanged+1s")
+            self.logCurrentAudioRouteForListener(reason: "audioSessionRouteChanged+1s before force")
+            self.forceSpeakerOnlyWhenNoExternalRoute(reason: "audioSessionRouteChanged+1s")
+            self.logCurrentAudioRouteForListener(reason: "audioSessionRouteChanged+1s after force")
         }
     }
 
@@ -1300,7 +1339,9 @@ extension MediaConnectionViewController: SkywaySessionDelegate {
         self.addAudioSessionObservers()
         self.logCurrentAudioRouteForListener(reason: "remoteConnectSucces immediate")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            self.logCurrentAudioRouteForListener(reason: "remoteConnectSucces+1s")
+            self.logCurrentAudioRouteForListener(reason: "remoteConnectSucces+1s before force")
+            self.forceSpeakerOnlyWhenNoExternalRoute(reason: "remoteConnectSucces+1s")
+            self.logCurrentAudioRouteForListener(reason: "remoteConnectSucces+1s after force")
         }
         self.observeCastLivePointForRoomSDK()
     }
