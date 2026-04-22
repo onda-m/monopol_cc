@@ -67,8 +67,19 @@ extension WaitViewController{
                 //重要(リアルタイムデータベースを使用)
                 self.conditionRef = self.rootRef.child(Util.INIT_FIREBASE + "/"
                     + String(self.user_id) + "/" + String(self.appDelegate.live_target_user_id))
-                let data = ["cast_live_point": myLivePoint + livePointGet, "effect_id": self.appDelegate.live_effect_id]
+                let newPoint = myLivePoint + livePointGet
+                let data = ["cast_live_point": newPoint, "effect_id": self.appDelegate.live_effect_id]
                 self.conditionRef.updateChildValues(data)
+
+                // Cast側自身の保持値とUIも同じ値に更新
+                UserDefaults.standard.set(newPoint, forKey: "myLivePoint")
+                if self.livePointLbl != nil {
+                    self.livePointLbl.text = UtilFunc.numFormatter(num: newPoint) + " pt"
+                    print("[LivePoint][Cast] startConnection updated livePointLbl: \(newPoint) pt")
+                } else {
+                    print("[LivePoint][Cast] startConnection livePointLbl is nil")
+                }
+
                 //配信レベルの処理
                 //user_infoテーブルの更新（キャスト）
                 //flg:1:値プラス、2:値マイナス
